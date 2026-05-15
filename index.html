@@ -289,6 +289,7 @@
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-analysis"   id="btn-analysis">📊 Analyse</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-canada"   id="btn-canada">🇨🇦 Canada</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"  id="btn-nuclear">☢ Nucléaire</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-ontario" id="btn-ontario">⚡ Ontario</button></li>
         </ul>
 
         <!-- PERIOD SELECTOR -->
@@ -530,19 +531,6 @@
                     <h6 class="mb-2">Production par centrale (MW) — nominal vs temps réel</h6>
                     <canvas id="nuclearChart"></canvas>
                 </div></div>
-                <!-- Historical trend chart -->
-                <div class="card mb-3" id="nucHistoryCard" style="display:none">
-                    <div class="chart-container" style="height:260px; padding:16px 16px 4px">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0">Production nucléaire Ontario — historique</h6>
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-secondary active" id="histBtn48h" onclick="switchHistoryPeriod('48h')">48 h</button>
-                                <button type="button" class="btn btn-outline-secondary"        id="histBtn7d"  onclick="switchHistoryPeriod('7j')">7 jours</button>
-                            </div>
-                        </div>
-                        <canvas id="nucHistoryChart"></canvas>
-                    </div>
-                </div>
                 <!-- Plant cards grid -->
                 <div class="nuclear-grid" id="nuclearGrid"></div>
                 <p style="color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center; margin-top:-8px; margin-bottom:18px;">
@@ -552,6 +540,67 @@
                     <button class="btn btn-light" onclick="loadNuclearTab()">🔄 Actualiser</button>
                 </div>
             </div>
+
+            <!-- ══════════════════════════════ ONTARIO GRID ══════════════════════════════ -->
+            <div class="tab-pane fade" id="tab-ontario">
+                <!-- KPIs -->
+                <div class="row g-3 mb-3" id="onGridKpis">
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Production actuelle</div>
+                        <div class="stat-value text-primary" id="on-total-now">--</div>
+                        <div class="stat-time">MW · Ontario IESO</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Part nucléaire</div>
+                        <div class="stat-value" style="color:#7c3aed" id="on-pct-nuclear">--</div>
+                        <div class="stat-time">% de la production totale</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Part renouvelable</div>
+                        <div class="stat-value text-success" id="on-pct-renewable">--</div>
+                        <div class="stat-time">Hydro + Éolien + Solaire</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Données disponibles</div>
+                        <div class="stat-value text-info" id="on-days-count">--</div>
+                        <div class="stat-time" id="on-data-age">Chargement…</div>
+                    </div></div>
+                </div>
+                <!-- 7-day stacked area chart -->
+                <div class="card mb-3">
+                    <div class="chart-container" style="height:340px; padding:16px 16px 8px">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Mix de production Ontario — 7 derniers jours (horaire)</h6>
+                            <span id="on-grid-status" style="font-size:0.75rem; color:var(--text-secondary)"></span>
+                        </div>
+                        <canvas id="onGridHistoryChart"></canvas>
+                    </div>
+                </div>
+                <!-- Today's detail -->
+                <div class="card mb-3" id="onTodayCard">
+                    <div class="chart-container" style="height:280px; padding:16px 16px 8px">
+                        <h6 class="mb-2" id="onTodayTitle">Aujourd'hui — production par heure</h6>
+                        <canvas id="onTodayChart"></canvas>
+                    </div>
+                </div>
+                <!-- Fuel mix donut -->
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-6"><div class="card"><div class="chart-container-sm" style="height:280px">
+                        <h6 class="mb-2">Mix de production — aujourd'hui</h6>
+                        <canvas id="onDonutChart"></canvas>
+                    </div></div></div>
+                    <div class="col-lg-6"><div class="card p-3" id="onFuelTable" style="min-height:280px">
+                        <h6 class="mb-3">Détail par source</h6>
+                        <div id="onFuelRows"></div>
+                    </div></div>
+                </div>
+                <p style="color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center; margin-bottom:18px;">
+                    Données IESO Ontario · GenOutputCapability · Mis à jour toutes les 2h via GitHub Actions
+                </p>
+                <div class="tab-actions">
+                    <button class="btn btn-light" onclick="loadOntarioTab()">🔄 Actualiser</button>
+                </div>
+            </div><!-- /tab-ontario -->
 
         </div><!-- /tab-content -->
     </div><!-- /content -->
@@ -604,12 +653,17 @@ const URLS = {
 // ─────────────────────────────────────────────────────────────────────────────
 const CORS_PROXY = 'https://corsproxy.io/?';
 
-// ── Cache GitHub pour les données nucléaires IESO ──────────────────────────
-// Remplace YOUR_USERNAME par ton nom d'utilisateur GitHub après avoir créé
-// le repo ieso-nuclear-data et activé le workflow.
-// Voir les instructions dans le fichier README fourni avec ce dashboard.
-const NUCLEAR_CACHE_URL   = 'https://raw.githubusercontent.com/ng565t59tc-star/Hydro_quebec_dashboard/main/data/nuclear.json';
-const NUCLEAR_HISTORY_URL = 'https://raw.githubusercontent.com/ng565t59tc-star/Hydro_quebec_dashboard/main/data/history.json';
+// ─────────────────────────────────────────────────────────────────────────────
+//  GITHUB CACHE — données IESO servies via raw.githubusercontent.com (CORS ✅)
+//  Remplacer YOUR_USERNAME par votre nom d'utilisateur GitHub
+// ─────────────────────────────────────────────────────────────────────────────
+const GITHUB_USER       = 'ng565t59tc-star';
+const GITHUB_REPO       = 'Hydro_quebec_dashboard';
+const GITHUB_BRANCH     = 'main';
+const _ghBase           = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}`;
+const NUCLEAR_CACHE_URL = `${_ghBase}/data/nuclear.json`;
+const DAILY_INDEX_URL   = `${_ghBase}/data/daily/index.json`;
+const DAILY_BASE_URL    = `${_ghBase}/data/daily`;
 
 async function corsGet(url, opts = {}) {
     // Tentative directe
@@ -1175,8 +1229,8 @@ const PROVINCES = [
 // Try Ontario IESO real-time XML feed
 async function fetchOntarioIESO() {
     try {
-        const url = 'https://reports-public.ieso.ca/public/RealtimeConstTotals/PUB_RealtimeConstTotals.xml';
-        const res = await corsGet(url, { signal: AbortSignal.timeout(8000) });
+        const url = 'https://reports.ieso.ca/public/RealtimeConstTotals/PUB_RealtimeConstTotals.xml';
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
         const doc  = new DOMParser().parseFromString(text, 'text/xml');
@@ -1367,41 +1421,34 @@ async function fetchIESONuclear() {
     // hours: [1, 2, ..., N]
     const result = { units: {}, hours: [], onTotal: 0, isLive: false, isAggregate: false };
 
-    // ── NIVEAU 0 : Cache GitHub (raw.githubusercontent.com a CORS *) ──────
-    // Fonctionne depuis n'importe quelle origine (file://, Wix, GitHub Pages…)
-    // Données mises à jour toutes les 30 min par GitHub Actions.
-    if (!NUCLEAR_CACHE_URL.includes('YOUR_USERNAME')) {
-        try {
-            const res = await fetch(NUCLEAR_CACHE_URL, { signal: AbortSignal.timeout(8000) });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-
-            if (data.units && Object.keys(data.units).length > 0 && data.hours?.length > 0) {
-                result.units = Object.fromEntries(
-                    Object.entries(data.units).map(([k, v]) => [k.toUpperCase(), v])
-                );
-                result.hours = data.hours;
-                Object.values(result.units).forEach(arr => {
-                    const last = arr[arr.length - 1];
-                    if (last != null && last > 0) result.onTotal += last;
-                });
-                result.isLive = true;
-                const ageMin = data.updated
-                    ? Math.round((Date.now() - new Date(data.updated)) / 60000)
-                    : '?';
-                log(`✅ Niveau 0 (GitHub cache): ${Object.keys(result.units).length} unités · ${Math.round(result.onTotal)} MW · données âgées de ${ageMin} min`);
-                return result;
-            }
-            throw new Error('JSON vide ou incomplet');
-        } catch(e) {
-            log(`⚠️ Niveau 0 (GitHub cache): ${e.message} → passage au Niveau 1`, true);
+    // ── NIVEAU 0 : GitHub cache (raw.githubusercontent.com — CORS ✅) ──
+    try {
+        const res = await fetch(NUCLEAR_CACHE_URL, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.units && Object.keys(data.units).length > 0 && data.hours?.length > 0) {
+            result.units = Object.fromEntries(
+                Object.entries(data.units).map(([k, v]) => [k.toUpperCase().replace(/\s+/g,''), v])
+            );
+            result.hours  = data.hours;
+            Object.values(result.units).forEach(arr => {
+                const last = arr[arr.length - 1];
+                if (last != null && last > 0) result.onTotal += last;
+            });
+            result.isLive = true;
+            const ageMin = data.updated ? Math.round((Date.now() - new Date(data.updated)) / 60000) : '?';
+            log(`✅ Niveau 0 (GitHub cache): ${Object.keys(result.units).length} unités · ${Math.round(result.onTotal)} MW · données âgées de ${ageMin} min`);
+            return result;
         }
+        throw new Error('Cache vide ou incomplet');
+    } catch(e) {
+        log(`⚠️ Niveau 0 (GitHub cache): ${e.message} → passage au Niveau 1`, true);
     }
 
     // ── NIVEAU 1 : GenOutputCapability — données unité par unité ──
     try {
-        const url = 'https://reports-public.ieso.ca/public/GenOutputCapability/PUB_GenOutputCapability.xml';
-        const res = await corsGet(url, { signal: AbortSignal.timeout(10000) });
+        const url = 'https://reports.ieso.ca/public/GenOutputCapability/PUB_GenOutputCapability.xml';
+        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const doc = new DOMParser().parseFromString(await res.text(), 'text/xml');
 
@@ -1459,8 +1506,8 @@ async function fetchIESONuclear() {
     // ── NIVEAU 2 : GenOutputbyFuelHourly — total Ontario, distribution proportionnelle ──
     try {
         const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
-        const url = `https://reports-public.ieso.ca/public/GenOutputbyFuelHourly/PUB_GenOutputbyFuelHourly_${today}.xml`;
-        const res = await corsGet(url, { signal: AbortSignal.timeout(8000) });
+        const url = `https://reports.ieso.ca/public/GenOutputbyFuelHourly/PUB_GenOutputbyFuelHourly_${today}.xml`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const doc = new DOMParser().parseFromString(await res.text(), 'text/xml');
 
@@ -1550,122 +1597,291 @@ function resolveUnitMW(unit, ieso, onTotalNameplate, onTotalLive) {
     return { mw: null, mwHours: null, source: 'static' };
 }
 
-// Données résolues par centrale — utilisées par showPlantChart()
-let nuclearPlantData = {};
-let nuclearIesoHours = [];
-
 // ─────────────────────────────────────────────────────────────────────────────
-//  NUCLEAR HISTORY  (48h / 7 jours)
+//  ONTARIO GRID TAB — données IESO complètes (tous types de carburant)
 // ─────────────────────────────────────────────────────────────────────────────
-let nuclearHistoryData = null;
-let currentHistoryPeriod = '48h';
+const FUEL_CONFIG = {
+    NUCLEAR:  { label: 'Nucléaire',   color: '#7c3aed', order: 0 },
+    HYDRO:    { label: 'Hydraulique', color: '#3b82f6', order: 1 },
+    WIND:     { label: 'Éolien',      color: '#10b981', order: 2 },
+    SOLAR:    { label: 'Solaire',     color: '#f59e0b', order: 3 },
+    GAS:      { label: 'Gaz naturel', color: '#ef4444', order: 4 },
+    BIOFUEL:  { label: 'Bioénergie',  color: '#84cc16', order: 5 },
+    OTHER:    { label: 'Autre',       color: '#9ca3af', order: 6 },
+};
 
-async function fetchNuclearHistory() {
-    if (NUCLEAR_HISTORY_URL.includes('YOUR_USERNAME')) return;
+let ontarioGridData = [];   // array of daily JSON objects, sorted by date
+
+async function fetchOntarioGrid() {
+    // 1) Fetch index to know available dates
+    let dates = [];
     try {
-        const res = await fetch(NUCLEAR_HISTORY_URL, { signal: AbortSignal.timeout(8000) });
+        const res = await fetch(DAILY_INDEX_URL, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (!data.data || data.data.length < 2) throw new Error('Historique insuffisant');
-        nuclearHistoryData = data;
-        log(`✅ Historique nucléaire: ${data.data.length} points · dernier ${data.updated}`);
-        renderNuclearHistory(currentHistoryPeriod);
-        document.getElementById('nucHistoryCard').style.display = '';
+        const idx = await res.json();
+        dates = (idx.dates || []).slice(-7);   // last 7 days max
+        log(`📅 Ontario grid: ${dates.length} jours disponibles (${dates[0] || '?'} → ${dates[dates.length-1] || '?'})`);
     } catch(e) {
-        log(`⚠️ Historique nucléaire: ${e.message}`, true);
+        log(`⚠️ Ontario grid index: ${e.message}`, true);
+        return [];
     }
-}
 
-function switchHistoryPeriod(period) {
-    currentHistoryPeriod = period;
-    document.getElementById('histBtn48h').classList.toggle('active', period === '48h');
-    document.getElementById('histBtn7d').classList.toggle('active',  period === '7j');
-    renderNuclearHistory(period);
-}
+    if (dates.length === 0) return [];
 
-function renderNuclearHistory(period) {
-    if (!nuclearHistoryData?.data?.length) return;
-    const now  = new Date();
-    const cutMs = period === '48h' ? 48 * 3600 * 1000 : 7 * 24 * 3600 * 1000;
-    const pts   = nuclearHistoryData.data.filter(d => (now - new Date(d.ts)) <= cutMs);
-    if (pts.length < 2) return;
+    // 2) Fetch all daily JSON files in parallel
+    const results = await Promise.allSettled(
+        dates.map(async d => {
+            const res = await fetch(`${DAILY_BASE_URL}/${d}.json`, { signal: AbortSignal.timeout(10000) });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        })
+    );
 
-    const fmt = period === '48h'
-        ? ts => { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}h`; }
-        : ts => { const d = new Date(ts); return `${d.getDate()}/${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}h`; };
-
-    const labels = pts.map(d => fmt(d.ts));
-    const { text, grid } = chartColors();
-
-    const PLANT_COLORS = {
-        bruce:      { bg: 'rgba(124,58,237,0.55)', border: '#7c3aed' },
-        darlington: { bg: 'rgba(33,150,243,0.55)',  border: '#2196f3' },
-        pickering:  { bg: 'rgba(76,175,80,0.55)',   border: '#4caf50' }
-    };
-    const PLANT_LABELS = { bruce: 'Bruce', darlington: 'Darlington', pickering: 'Pickering' };
-
-    const datasets = ['bruce','darlington','pickering']
-        .filter(p => pts.some(d => (d[p] ?? 0) > 0))
-        .map(p => ({
-            label: PLANT_LABELS[p],
-            data:  pts.map(d => d[p] ?? 0),
-            backgroundColor: PLANT_COLORS[p].bg,
-            borderColor:     PLANT_COLORS[p].border,
-            borderWidth: 1.5,
-            fill: true,
-            tension: 0.3,
-            pointRadius: 0
-        }));
-
-    // Total line on top
-    datasets.push({
-        label: 'Total Ontario',
-        data:  pts.map(d => d.total ?? 0),
-        borderColor: '#f59e0b',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.3,
-        pointRadius: 0,
-        borderDash: [4, 3]
+    const loaded = [];
+    results.forEach((r, i) => {
+        if (r.status === 'fulfilled') {
+            loaded.push(r.value);
+            log(`  ✅ ${dates[i]}: ${r.value.hours?.length || 0}h · ${Object.keys(r.value.fuels||{}).join(', ')}`);
+        } else {
+            log(`  ⚠️ ${dates[i]}: ${r.reason?.message}`, true);
+        }
     });
 
-    destroyChart('nucHistoryChart');
-    charts['nucHistoryChart'] = new Chart(
-        document.getElementById('nucHistoryChart').getContext('2d'),
+    loaded.sort((a, b) => a.date.localeCompare(b.date));
+    return loaded;
+}
+
+function renderOntarioGrid(dailyData) {
+    if (!dailyData || dailyData.length === 0) {
+        document.getElementById('on-grid-status').textContent = '⚠️ Aucune donnée disponible — configurez GitHub Actions';
+        document.getElementById('on-days-count').textContent = '0 j';
+        document.getElementById('on-data-age').textContent = 'Données non disponibles';
+        return;
+    }
+
+    // ── KPIs from most recent data point ──
+    const latest = dailyData[dailyData.length - 1];
+    const latestHours = latest.hours || [];
+    const lastIdx = latestHours.length - 1;
+    const latestFuels = latest.fuels || {};
+
+    let totalNow = 0, nuclearNow = 0, renewableNow = 0;
+    Object.entries(latestFuels).forEach(([fuel, arr]) => {
+        const mw = arr[lastIdx] || 0;
+        totalNow += mw;
+        if (fuel === 'NUCLEAR') nuclearNow += mw;
+        if (['HYDRO','WIND','SOLAR'].includes(fuel)) renewableNow += mw;
+    });
+
+    document.getElementById('on-total-now').textContent = Math.round(totalNow).toLocaleString('fr-CA') + ' MW';
+    document.getElementById('on-pct-nuclear').textContent  = totalNow > 0 ? (nuclearNow/totalNow*100).toFixed(1) + ' %' : '--';
+    document.getElementById('on-pct-renewable').textContent = totalNow > 0 ? (renewableNow/totalNow*100).toFixed(1) + ' %' : '--';
+    document.getElementById('on-days-count').textContent = dailyData.length + ' j';
+    const ageMin = latest.updated ? Math.round((Date.now() - new Date(latest.updated)) / 60000) : '?';
+    document.getElementById('on-data-age').textContent = `Données âgées de ${ageMin} min`;
+    document.getElementById('on-grid-status').textContent = `✅ ${dailyData.length} jour(s) · mis à jour il y a ${ageMin} min`;
+
+    // ── Build combined time series (all days concatenated) ──
+    const allLabels  = [];
+    const fuelSeries = {};    // fuel -> flat MW array
+
+    Object.keys(FUEL_CONFIG).forEach(f => fuelSeries[f] = []);
+
+    dailyData.forEach(day => {
+        const hours = day.hours || [];
+        hours.forEach((h, i) => {
+            const label = `${day.date} H${String(h).padStart(2,'0')}`;
+            allLabels.push(label);
+            Object.keys(FUEL_CONFIG).forEach(fuel => {
+                const arr = day.fuels?.[fuel] || [];
+                fuelSeries[fuel].push(arr[i] || 0);
+            });
+        });
+    });
+
+    // ── 7-day stacked area chart ──
+    destroyChart('onGridHistoryChart');
+    const sortedFuels = Object.entries(FUEL_CONFIG).sort((a,b) => a[1].order - b[1].order).map(([k]) => k);
+
+    const histDatasets = sortedFuels
+        .filter(fuel => fuelSeries[fuel].some(v => v > 0))
+        .map(fuel => ({
+            label:           FUEL_CONFIG[fuel].label,
+            data:            fuelSeries[fuel],
+            backgroundColor: FUEL_CONFIG[fuel].color + 'cc',
+            borderColor:     FUEL_CONFIG[fuel].color,
+            borderWidth:     0.5,
+            fill:            true,
+            tension:         0.2,
+            pointRadius:     0,
+            pointHoverRadius: 3,
+        }));
+
+    // Tick labels: only show at day boundaries (H01)
+    const tickLabels = allLabels.map(l => l.includes('H01') ? l.split(' ')[0] : '');
+
+    charts['onGridHistoryChart'] = new Chart(
+        document.getElementById('onGridHistoryChart').getContext('2d'),
         {
             type: 'line',
-            data: { labels, datasets },
+            data: { labels: allLabels, datasets: histDatasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'top', labels: { color: text, font: { size: 11 }, boxWidth: 14, padding: 12 } },
-                    tooltip: {
-                        mode: 'index', intersect: false,
-                        callbacks: {
-                            label: c => `${c.dataset.label}: ${Math.round(c.parsed.y).toLocaleString('fr-CA')} MW`,
-                        }
+                animation: false,
+                scales: {
+                    x: {
+                        ticks: {
+                            callback: (_, i) => tickLabels[i],
+                            maxRotation: 0,
+                            autoSkip: false,
+                            color: 'var(--text-secondary)',
+                            font: { size: 10 },
+                        },
+                        grid: { color: 'rgba(128,128,128,0.15)' }
+                    },
+                    y: {
+                        stacked: true,
+                        min: 0,
+                        ticks: { callback: v => (v/1000).toFixed(0) + ' GW', color: 'var(--text-secondary)' },
+                        grid: { color: 'rgba(128,128,128,0.15)' }
                     }
                 },
-                interaction: { mode: 'index', intersect: false },
-                scales: {
-                    x: { stacked: true, grid: { display: false }, ticks: { color: text, maxTicksLimit: period === '48h' ? 12 : 14, maxRotation: 0, font: { size: 10 }, autoSkip: true } },
-                    y: { stacked: true, grid: { color: grid }, ticks: { color: text, callback: v => v.toLocaleString('fr-CA') + ' MW', font: { size: 10 } } }
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, color: 'var(--text-primary)' }},
+                    tooltip: {
+                        callbacks: {
+                            title: items => items[0].label,
+                            label: item => ` ${item.dataset.label}: ${Math.round(item.raw).toLocaleString('fr-CA')} MW`
+                        }
+                    }
                 }
             }
         }
     );
+
+    // ── Today's hourly chart (last day) ──
+    const todayHours = latest.hours || [];
+    const todayLabels = todayHours.map(h => `H${String(h).padStart(2,'0')}`);
+    const todayTitle  = `${latest.date} — production horaire`;
+    document.getElementById('onTodayTitle').textContent = todayTitle;
+
+    destroyChart('onTodayChart');
+    const todayDatasets = sortedFuels
+        .filter(fuel => (latest.fuels?.[fuel] || []).some(v => v > 0))
+        .map(fuel => ({
+            label:           FUEL_CONFIG[fuel].label,
+            data:            latest.fuels?.[fuel] || [],
+            backgroundColor: FUEL_CONFIG[fuel].color + 'cc',
+            borderColor:     FUEL_CONFIG[fuel].color,
+            borderWidth:     0.5,
+            fill:            true,
+            tension:         0.2,
+            pointRadius:     2,
+            pointHoverRadius: 5,
+        }));
+
+    charts['onTodayChart'] = new Chart(
+        document.getElementById('onTodayChart').getContext('2d'),
+        {
+            type: 'line',
+            data: { labels: todayLabels, datasets: todayDatasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: {
+                        ticks: { color: 'var(--text-secondary)', maxTicksLimit: 12 },
+                        grid: { color: 'rgba(128,128,128,0.15)' }
+                    },
+                    y: {
+                        stacked: true,
+                        min: 0,
+                        ticks: { callback: v => (v/1000).toFixed(0) + ' GW', color: 'var(--text-secondary)' },
+                        grid: { color: 'rgba(128,128,128,0.15)' }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, color: 'var(--text-primary)' }},
+                    tooltip: {
+                        callbacks: {
+                            label: item => ` ${item.dataset.label}: ${Math.round(item.raw).toLocaleString('fr-CA')} MW`
+                        }
+                    }
+                }
+            }
+        }
+    );
+
+    // ── Donut — today's totals ──
+    const donutFuels = sortedFuels.filter(f => {
+        const arr = latest.fuels?.[f] || [];
+        return arr.reduce((s,v) => s+v, 0) > 0;
+    });
+    const donutData   = donutFuels.map(f => {
+        const arr = latest.fuels?.[f] || [];
+        return arr.reduce((s,v) => s+v, 0);
+    });
+    const donutColors = donutFuels.map(f => FUEL_CONFIG[f]?.color || '#ccc');
+    const donutLabels = donutFuels.map(f => FUEL_CONFIG[f]?.label || f);
+
+    destroyChart('onDonutChart');
+    charts['onDonutChart'] = new Chart(
+        document.getElementById('onDonutChart').getContext('2d'),
+        {
+            type: 'doughnut',
+            data: { labels: donutLabels, datasets: [{ data: donutData, backgroundColor: donutColors, borderWidth: 1 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 12, color: 'var(--text-primary)', padding: 8 }},
+                    tooltip: {
+                        callbacks: {
+                            label: item => {
+                                const total = item.dataset.data.reduce((s,v) => s+v, 0);
+                                const pct   = total > 0 ? (item.raw/total*100).toFixed(1) : '0';
+                                return ` ${item.label}: ${Math.round(item.raw/1000).toLocaleString('fr-CA')} GWh · ${pct}%`;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    );
+
+    // ── Fuel table ──
+    const grandTotal = donutFuels.reduce((s,f,i) => s + donutData[i], 0);
+    const rows = donutFuels.map((f, i) => {
+        const mwh   = Math.round(donutData[i]);
+        const pct   = grandTotal > 0 ? (donutData[i]/grandTotal*100).toFixed(1) : '0';
+        const color = FUEL_CONFIG[f]?.color || '#ccc';
+        return `<div class="d-flex align-items-center mb-2">
+            <div style="width:12px;height:12px;border-radius:3px;background:${color};margin-right:8px;flex-shrink:0"></div>
+            <div style="flex:1;font-size:0.85rem;color:var(--text-primary)">${FUEL_CONFIG[f]?.label || f}</div>
+            <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-right:8px">${mwh.toLocaleString('fr-CA')} MWh</div>
+            <div style="font-size:0.8rem;color:var(--text-secondary);width:42px;text-align:right">${pct}%</div>
+        </div>`;
+    }).join('');
+    document.getElementById('onFuelRows').innerHTML = rows;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+let ontarioTabLoaded = false;
+
+async function loadOntarioTab() {
+    log('🔄 Chargement Ontario Grid');
+    ontarioTabLoaded = false;
+    ontarioGridData  = await fetchOntarioGrid();
+    renderOntarioGrid(ontarioGridData);
+    ontarioTabLoaded = true;
+}
+
+// Données résolues par centrale — utilisées par showPlantChart()
+let nuclearPlantData = {};
+let nuclearIesoHours = [];
+
 async function loadNuclearTab() {
     log('🔄 Chargement Nucléaire');
     nuclearPlantData = {};
-    // Charger en parallèle : snapshot courant + historique
-    const [ieso] = await Promise.all([
-        fetchIESONuclear(),
-        fetchNuclearHistory()
-    ]);
+    const ieso = await fetchIESONuclear();
     nuclearIesoHours = ieso?.hours ?? [];
 
     // Nominal total Ontario (Bruce + Darlington + Pickering, sans Lepreau)
@@ -1983,6 +2199,7 @@ document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () =>
 document.getElementById('btn-analysis').addEventListener('shown.bs.tab',   () => { loadAnalysisTab(); });
 document.getElementById('btn-canada').addEventListener('shown.bs.tab',     () => { loadCanadaTab(); });
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
+document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () => { loadOntarioTab(); });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AUTO-REFRESH every 5 min (active tab only)
@@ -1995,6 +2212,7 @@ setInterval(() => {
     else if (active === 'btn-analysis')   loadAnalysisTab();
     else if (active === 'btn-canada')     loadCanadaTab();
     else if (active === 'btn-nuclear')    loadNuclearTab();
+    else if (active === 'btn-ontario')    loadOntarioTab();
 }, 5 * 60 * 1000);
 
 // ─────────────────────────────────────────────────────────────────────────────
