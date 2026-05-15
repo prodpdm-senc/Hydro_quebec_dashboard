@@ -1,0 +1,174 @@
+name: Update Daily IESO Grid Data
+
+# Runs every 2 hours (data refreshes throughout the day),
+# and also manually on demand or on push.
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch IESO daily GenOutputCapability and update JSON files
+        run: |
+          mkdir -p data/daily
+          python3 << 'PYEOF'
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          import json
+          import os
+          import glob
+          from datetime import datetime, timezone, timedelta
+
+          ns = 'http://www.theIMO.com/schema'
+
+          # Normalise fuel type names from IESO to standard keys
+          FUEL_MAP = {
+              'NUCLEAR':      'NUCLEAR',
+              'GAS':          'GAS',
+              'NATURAL GAS':  'GAS',
+              'NG':           'GAS',
+              'HYDRO':        'HYDRO',
+              'WATER':        'HYDRO',
+              'WIND':         'WIND',
+              'SOLAR':        'SOLAR',
+              'SUN':          'SOLAR',
+              'BIOFUEL':      'BIOFUEL',
+              'BIOMASS':      'BIOFUEL',
+              'BIO':          'BIOFUEL',
+              'LANDFILL GAS': 'BIOFUEL',
+              'LFG':          'BIOFUEL',
+          }
+
+          def fetch_day(date_str):
+              """
+              Fetch PUB_GenOutputCapability_{date_str}.xml from IESO,
+              aggregate all generators by fuel type, return a dict.
+              date_str = 'YYYYMMDD'
+              """
+              url = (
+                  'https://reports-public.ieso.ca/public/GenOutputCapability/'
+                  f'PUB_GenOutputCapability_{date_str}.xml'
+              )
+              print(f"Fetching {url} ...")
+              req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  xml_data = resp.read()
+              print(f"  Downloaded {len(xml_data):,} bytes")
+
+              root = ET.fromstring(xml_data)
+              date_el = root.find(f'.//{{{ns}}}Date')
+
+              # fuel_hours[fuel][hour] = cumulative MW
+              fuel_hours = {}
+              max_hour   = 0
+
+              for gen in root.findall(f'.//{{{ns}}}Generator'):
+                  name_el = gen.find(f'{{{ns}}}GeneratorName')
+                  fuel_el = gen.find(f'{{{ns}}}FuelType')
+                  if name_el is None or fuel_el is None:
+                      continue
+
+                  raw_fuel = fuel_el.text.strip().upper()
+                  fuel_key = FUEL_MAP.get(raw_fuel, 'OTHER')
+
+                  if fuel_key not in fuel_hours:
+                      fuel_hours[fuel_key] = {}
+
+                  for output in gen.findall(f'.//{{{ns}}}Output'):
+                      hour_el = output.find(f'{{{ns}}}Hour')
+                      mw_el   = output.find(f'{{{ns}}}EnergyMW')
+                      if hour_el is None:
+                          continue
+                      hour = int(hour_el.text)
+                      mw   = max(0, int(mw_el.text)) if mw_el is not None else 0
+                      fuel_hours[fuel_key][hour] = fuel_hours[fuel_key].get(hour, 0) + mw
+                      if hour > max_hour:
+                          max_hour = hour
+
+              if max_hour == 0:
+                  print("  ⚠️  No hourly data found.")
+                  return None
+
+              hours = list(range(1, max_hour + 1))
+              fuels_out = {
+                  fuel: [hour_dict.get(h, 0) for h in hours]
+                  for fuel, hour_dict in fuel_hours.items()
+              }
+
+              iso_date = (
+                  date_el.text
+                  if date_el is not None and date_el.text
+                  else f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+              )
+
+              return {
+                  'date':    iso_date,
+                  'updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                  'hours':   hours,
+                  'fuels':   fuels_out,
+              }
+
+          # ── Fetch today's data ──────────────────────────────────────────────
+          now_utc   = datetime.now(timezone.utc)
+          today_str = now_utc.strftime('%Y%m%d')
+          today_iso = now_utc.strftime('%Y-%m-%d')
+
+          daily = fetch_day(today_str)
+          if daily:
+              out_file = f'data/daily/{today_iso}.json'
+              with open(out_file, 'w') as f:
+                  json.dump(daily, f, separators=(',', ':'))
+              total_mw = sum(
+                  arr[-1] for arr in daily['fuels'].values() if arr
+              )
+              print(
+                  f"  Saved {out_file}: {len(daily['hours'])}h · "
+                  f"{len(daily['fuels'])} fuels · {total_mw} MW (last hour)"
+              )
+
+          # ── Delete files older than 7 days ─────────────────────────────────
+          cutoff = now_utc - timedelta(days=7)
+          for f in glob.glob('data/daily/????-??-??.json'):
+              date_str_f = os.path.basename(f).replace('.json', '')
+              try:
+                  file_date = datetime.strptime(date_str_f, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                  if file_date < cutoff:
+                      os.remove(f)
+                      print(f"  Deleted old file: {f}")
+              except ValueError:
+                  pass
+
+          # ── Rebuild index.json ─────────────────────────────────────────────
+          available = sorted(glob.glob('data/daily/????-??-??.json'))
+          dates = [os.path.basename(f).replace('.json', '') for f in available]
+
+          index = {
+              'updated': now_utc.strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'dates':   dates,
+          }
+          with open('data/daily/index.json', 'w') as f:
+              json.dump(index, f)
+          print(f"index.json updated: {dates}")
+
+          PYEOF
+
+      - name: Commit and push if data changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/daily/
+          git diff --staged --quiet && echo "No changes." || (
+            git commit -m "data: daily IESO update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push
+          )
