@@ -1601,13 +1601,13 @@ function resolveUnitMW(unit, ieso, onTotalNameplate, onTotalLive) {
 //  ONTARIO GRID TAB — données IESO complètes (tous types de carburant)
 // ─────────────────────────────────────────────────────────────────────────────
 const FUEL_CONFIG = {
-    NUCLEAR:  { label: 'Nucléaire',   color: '#7c3aed', order: 0 },
-    HYDRO:    { label: 'Hydraulique', color: '#3b82f6', order: 1 },
-    WIND:     { label: 'Éolien',      color: '#10b981', order: 2 },
-    SOLAR:    { label: 'Solaire',     color: '#f59e0b', order: 3 },
-    GAS:      { label: 'Gaz naturel', color: '#ef4444', order: 4 },
-    BIOFUEL:  { label: 'Bioénergie',  color: '#84cc16', order: 5 },
-    OTHER:    { label: 'Autre',       color: '#9ca3af', order: 6 },
+    NUCLEAR:  { label: 'Nucléaire',   color: '#4f5b9e', order: 0 },  // indigo foncé
+    HYDRO:    { label: 'Hydraulique', color: '#2478b4', order: 1 },  // bleu acier
+    WIND:     { label: 'Éolien',      color: '#3a9e72', order: 2 },  // vert sauge
+    SOLAR:    { label: 'Solaire',     color: '#c8952e', order: 3 },  // ambre doré
+    GAS:      { label: 'Gaz naturel', color: '#b84848', order: 4 },  // rouge atténué
+    BIOFUEL:  { label: 'Bioénergie',  color: '#6e8f35', order: 5 },  // olive
+    OTHER:    { label: 'Autre',       color: '#7a8fa6', order: 6 },  // gris ardoise
 };
 
 let ontarioGridData = [];   // array of daily JSON objects, sorted by date
