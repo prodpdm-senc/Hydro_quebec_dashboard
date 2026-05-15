@@ -263,6 +263,7 @@
     <!-- HEADER -->
     <div class="header">
         <div class="header-actions">
+            <button class="header-btn" id="consoleToggle" title="Afficher/masquer le diagnostic">🖥</button>
             <button class="header-btn" id="themeToggle" title="Changer de thème">🌙</button>
         </div>
         <h1>⚡ Dashboard Hydro-Québec</h1>
@@ -270,7 +271,7 @@
     </div>
 
     <!-- DEBUG BOX -->
-    <div class="debug collapsed" id="debugBox">
+    <div class="debug collapsed" id="debugBox" style="display:none">
         <button class="debug-toggle" id="debugToggle"><i class="bi bi-chevron-down"></i> Diagnostic</button>
         <span id="debugLog">Initialisation...</span>
     </div>
@@ -283,13 +284,13 @@
 
         <!-- TABS NAV -->
         <ul class="nav nav-pills justify-content-center mb-3" id="mainTabs" role="tablist">
-            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-demand"     id="btn-demand">⚡ Demande</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-production" id="btn-production">🔋 Production</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-exchange"   id="btn-exchange">🔄 Échanges</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-analysis"   id="btn-analysis">📊 Analyse</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-canada"   id="btn-canada">🇨🇦 Canada</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"  id="btn-nuclear">☢ Nucléaire</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-ontario" id="btn-ontario">⚡ Ontario</button></li>
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-canada"     id="btn-canada">🇨🇦 Canada</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-demand"     id="btn-demand">💧 Hydro-Québec</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-ontario"   id="btn-ontario">⚡ Ontario</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"   id="btn-nuclear">☢ Nucléaire</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-production" id="btn-production">🔋 Production HQ</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-exchange"   id="btn-exchange">🔄 Échanges HQ</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-analysis"   id="btn-analysis">📊 Analyse HQ</button></li>
         </ul>
 
         <!-- PERIOD SELECTOR -->
@@ -303,7 +304,7 @@
         <div class="tab-content">
 
             <!-- ══════════════════════════════ DEMANDE ══════════════════════════════ -->
-            <div class="tab-pane fade show active" id="tab-demand">
+            <div class="tab-pane fade" id="tab-demand">
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Demande actuelle</div>
@@ -462,7 +463,7 @@
             </div>
 
             <!-- ══════════════════════════════ CANADA ══════════════════════════════ -->
-            <div class="tab-pane fade" id="tab-canada">
+            <div class="tab-pane fade show active" id="tab-canada">
                 <!-- KPI row -->
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
@@ -568,7 +569,7 @@
                 </div>
                 <!-- 7-day stacked area chart -->
                 <div class="card mb-3">
-                    <div class="chart-container" style="height:340px; padding:16px 16px 8px">
+                    <div class="chart-container" style="height:360px; padding:16px 16px 12px">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="mb-0">Mix de production Ontario — 7 derniers jours (horaire)</h6>
                             <span id="on-grid-status" style="font-size:0.75rem; color:var(--text-secondary)"></span>
@@ -578,7 +579,7 @@
                 </div>
                 <!-- Today's detail -->
                 <div class="card mb-3" id="onTodayCard">
-                    <div class="chart-container" style="height:280px; padding:16px 16px 8px">
+                    <div class="chart-container" style="height:300px; padding:16px 16px 12px">
                         <h6 class="mb-2" id="onTodayTitle">Aujourd'hui — production par heure</h6>
                         <canvas id="onTodayChart"></canvas>
                     </div>
@@ -731,6 +732,13 @@ debugToggle.addEventListener('click', e => {
     debugToggle.innerHTML = open ? '<i class="bi bi-chevron-down"></i> Diagnostic' : '<i class="bi bi-chevron-up"></i> Masquer';
     localStorage.setItem('hq-debug', String(!open));
 });
+
+document.getElementById('consoleToggle').addEventListener('click', () => {
+    const hidden = debugBox.style.display === 'none';
+    debugBox.style.display = hidden ? '' : 'none';
+    localStorage.setItem('hq-console', String(hidden));
+});
+if (localStorage.getItem('hq-console') === 'true') debugBox.style.display = '';
 
 function log(msg, err=false) {
     const t = new Date().toLocaleTimeString('fr-CA');
@@ -1748,7 +1756,7 @@ function renderOntarioGrid(dailyData) {
                     }
                 },
                 plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 16, boxHeight: 10, padding: 16, color: labelColor, font: { size: 12 } }},
+                    legend: { position: 'top', labels: { boxWidth: 16, boxHeight: 10, padding: 14, color: labelColor, font: { size: 12 } }},
                     tooltip: {
                         callbacks: {
                             title: items => items[0].label,
@@ -1802,7 +1810,7 @@ function renderOntarioGrid(dailyData) {
                     }
                 },
                 plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 16, boxHeight: 10, padding: 16, color: labelColor, font: { size: 12 } }},
+                    legend: { position: 'top', labels: { boxWidth: 16, boxHeight: 10, padding: 14, color: labelColor, font: { size: 12 } }},
                     tooltip: {
                         callbacks: {
                             label: item => ` ${item.dataset.label}: ${Math.round(item.raw).toLocaleString('fr-CA')} MW`
@@ -2195,6 +2203,7 @@ document.querySelectorAll('.period-btn').forEach(btn => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  TAB SWITCHING — lazy load
 // ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('btn-demand').addEventListener('shown.bs.tab',     () => { if(!store.demand.length)     loadDemandTab(); });
 document.getElementById('btn-production').addEventListener('shown.bs.tab', () => { if(!store.production.length) loadProductionTab(); });
 document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () => { if(!store.exchange.length)   loadExchangeTab(); });
 document.getElementById('btn-analysis').addEventListener('shown.bs.tab',   () => { loadAnalysisTab(); });
@@ -2222,7 +2231,7 @@ setInterval(() => {
 (async () => {
     log('🚀 Initialisation dashboard Hydro-Québec');
     try {
-        await loadDemandTab();
+        await loadCanadaTab();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
         log('✅ Dashboard prêt');
