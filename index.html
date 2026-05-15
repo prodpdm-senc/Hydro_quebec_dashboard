@@ -9,8 +9,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <style>
         :root {
-            --bg-gradient-1: #667eea;
-            --bg-gradient-2: #764ba2;
+            --bg-gradient-1: #243447;
+            --bg-gradient-2: #1a2838;
+            --accent: #4a7fa5;
             --card-bg: #ffffff;
             --text-primary: #212529;
             --text-secondary: #6c757d;
@@ -19,8 +20,8 @@
             --debug-bg: rgba(255,255,255,0.95);
         }
         [data-theme="dark"] {
-            --bg-gradient-1: #1a1a2e;
-            --bg-gradient-2: #16213e;
+            --bg-gradient-1: #141e2b;
+            --bg-gradient-2: #0f1824;
             --card-bg: #2d3748;
             --text-primary: #f7fafc;
             --text-secondary: #a0aec0;
@@ -78,7 +79,7 @@
         /* Nav tabs */
         .nav-pills .nav-link {
             background: rgba(255,255,255,0.85);
-            color: #667eea;
+            color: #4a7fa5;
             font-weight: 600;
             margin: 0 4px;
             border-radius: 10px;
@@ -87,7 +88,7 @@
         .nav-pills .nav-link:hover { background: #fff; transform: translateY(-2px); }
         .nav-pills .nav-link.active {
             background: #fff;
-            color: #667eea;
+            color: #4a7fa5;
             box-shadow: 0 4px 14px rgba(0,0,0,0.18);
         }
         /* Debug box */
@@ -109,8 +110,8 @@
         .debug-toggle {
             position: absolute;
             right: 8px; top: 8px;
-            background: rgba(102,126,234,0.12);
-            border: 1px solid rgba(102,126,234,0.3);
+            background: rgba(74,127,165,0.12);
+            border: 1px solid rgba(74,127,165,0.3);
             color: var(--text-primary);
             padding: 4px 10px;
             border-radius: 6px;
@@ -118,7 +119,7 @@
             font-size: 0.78rem;
             transition: background 0.2s;
         }
-        .debug-toggle:hover { background: rgba(102,126,234,0.25); }
+        .debug-toggle:hover { background: rgba(74,127,165,0.25); }
         /* Action buttons */
         .tab-actions { text-align: center; margin-top: 10px; display: flex; justify-content: center; gap: 10px; }
         /* Period selector */
@@ -149,7 +150,7 @@
         .period-btn:hover { background: rgba(255,255,255,0.3); }
         .period-btn.active {
             background: #fff;
-            color: #667eea;
+            color: #4a7fa5;
             border-color: #fff;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
@@ -176,7 +177,7 @@
         .clean-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
         .source-pills { display: flex; flex-wrap: wrap; gap: 3px; }
         .source-pill { font-size: 0.66rem; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
-        .live-badge { font-size: 0.72rem; color: #4caf50; margin-top: 6px; font-weight: 600; }
+        .live-badge { font-size: 0.72rem; color: #2e8b6a; margin-top: 6px; font-weight: 600; }
         .chart-container-tall { position: relative; height: 420px; padding: 16px 16px 50px 16px; }
         /* ── Nuclear tab ── */
         .nuclear-grid {
@@ -206,13 +207,13 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: linear-gradient(135deg, rgba(124,58,237,0.07) 0%, rgba(109,40,217,0.04) 100%);
+            background: linear-gradient(135deg, rgba(74,95,163,0.07) 0%, rgba(42,111,168,0.04) 100%);
         }
         .nuclear-plant-name { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
         .nuclear-plant-meta { font-size: 0.7rem; color: var(--text-secondary); margin-top: 2px; }
         .nuclear-cap-display { text-align: right; }
         .nuclear-cap-mw  { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
-        .nuclear-live-mw { font-size: 0.95rem; font-weight: 700; color: #7c3aed; }
+        .nuclear-live-mw { font-size: 0.95rem; font-weight: 700; color: #4a5fa3; }
         .nuclear-cap-label { font-size: 0.68rem; color: var(--text-secondary); }
         .nuclear-badge {
             display: inline-block;
@@ -223,9 +224,9 @@
             margin-left: 6px;
             vertical-align: middle;
         }
-        .badge-live     { background:rgba(76,175,80,0.15);  color:#4caf50;  border:1px solid rgba(76,175,80,0.3); }
-        .badge-estimate { background:rgba(255,152,0,0.15);  color:#ff9800;  border:1px solid rgba(255,152,0,0.3); }
-        .badge-refurb   { background:rgba(33,150,243,0.15); color:#2196f3;  border:1px solid rgba(33,150,243,0.3); }
+        .badge-live     { background:rgba(46,139,106,0.15);  color:#2e8b6a; border:1px solid rgba(46,139,106,0.35); }
+        .badge-estimate { background:rgba(196,122,46,0.15);  color:#b06a20; border:1px solid rgba(196,122,46,0.35); }
+        .badge-refurb   { background:rgba(42,111,168,0.15);  color:#2a6fa8; border:1px solid rgba(42,111,168,0.35); }
         .nuclear-units  { padding: 10px 16px 13px; display: flex; flex-direction: column; gap: 5px; }
         .unit-row { display: grid; grid-template-columns: 38px 1fr 58px 56px; align-items: center; gap: 8px; }
         .unit-label { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); }
@@ -234,11 +235,11 @@
         .unit-bar-fill {
             height: 100%;
             border-radius: 3px;
-            background: linear-gradient(90deg, #7c3aed, #a855f7);
+            background: linear-gradient(90deg, #4a5fa3, #5a7ab8);
             transition: width 0.8s ease;
         }
         .unit-bar-fill.offline { background: rgba(156,163,175,0.35); }
-        .unit-bar-fill.refurb  { background: linear-gradient(90deg, #2196f3, #42a5f5); }
+        .unit-bar-fill.refurb  { background: linear-gradient(90deg, #2a6fa8, #4a8fc0); }
         .unit-mw  { font-size: 0.72rem; font-weight: 600; color: var(--text-primary); text-align: right; }
         .unit-nom { font-size: 0.68rem; color: var(--text-secondary); }
         .nuclear-total-bar {
@@ -252,7 +253,7 @@
         .nuclear-total-bar-fill {
             height: 100%;
             border-radius: 4px;
-            background: linear-gradient(90deg, #7c3aed, #a855f7);
+            background: linear-gradient(90deg, #4a5fa3, #5a7ab8);
             transition: width 0.9s ease;
         }
     </style>
@@ -507,12 +508,12 @@
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Capacité Canada</div>
-                        <div class="stat-value" style="color:#7c3aed" id="nuc-total-cap">12,861 MW</div>
+                        <div class="stat-value" style="color:#4a5fa3" id="nuc-total-cap">12,861 MW</div>
                         <div class="stat-time">4 centrales · 16 unités</div>
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Production Ontario</div>
-                        <div class="stat-value" style="color:#7c3aed" id="nuc-on-live">--</div>
+                        <div class="stat-value" style="color:#4a5fa3" id="nuc-on-live">--</div>
                         <div class="stat-time" id="nuc-on-live-label">IESO · temps réel</div>
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
@@ -522,7 +523,7 @@
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Point Lepreau (NB)</div>
-                        <div class="stat-value" style="color:#7c3aed">705 MW</div>
+                        <div class="stat-value" style="color:#4a5fa3">705 MW</div>
                         <div class="stat-time">NB Power · 1 unité CANDU</div>
                     </div></div>
                 </div>
@@ -552,7 +553,7 @@
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Part nucléaire</div>
-                        <div class="stat-value" style="color:#7c3aed" id="on-pct-nuclear">--</div>
+                        <div class="stat-value" style="color:#4a5fa3" id="on-pct-nuclear">--</div>
                         <div class="stat-time">% de la production totale</div>
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
@@ -734,7 +735,7 @@ debugToggle.addEventListener('click', e => {
 
 function log(msg, err=false) {
     const t = new Date().toLocaleTimeString('fr-CA');
-    debugLog.innerHTML += `<br><span style="color:${err?'#f44336':'#4caf50'}">[${t}] ${msg}</span>`;
+    debugLog.innerHTML += `<br><span style="color:${err?'#9e3d3d':'#2e8b6a'}">[${t}] ${msg}</span>`;
     debugBox.scrollTop = debugBox.scrollHeight;
     console.log(`[${t}] ${msg}`);
 }
@@ -861,19 +862,19 @@ function renderDemandCharts() {
     // Main chart
     const labels = recent.map(r => xLabel(r.date));
     const values = recent.map(r => r.valeurs.demandeTotal);
-    buildLineChart('demandChart', labels, [{ label:'Demande', data:values, borderColor:'#667eea', backgroundColor:'rgba(102,126,234,0.12)', borderWidth:2.5, pointRadius:0 }]);
+    buildLineChart('demandChart', labels, [{ label:'Demande', data:values, borderColor:'#4a7fa5', backgroundColor:'rgba(74,127,165,0.12)', borderWidth:2.5, pointRadius:0 }]);
 
     // By weekday
     const wdBuckets = [[], [], [], [], [], [], []];
     recent.forEach(r => wdBuckets[new Date(r.date).getDay()].push(r.valeurs.demandeTotal));
     const wdAvg = wdBuckets.map(b => b.length ? b.reduce((a,c)=>a+c,0)/b.length : 0);
-    buildBarChart('weekdayChart', ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'], [{ label:'Moyenne MW', data:wdAvg, backgroundColor:'rgba(76,175,80,0.6)', borderColor:'#4caf50', borderWidth:2 }]);
+    buildBarChart('weekdayChart', ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'], [{ label:'Moyenne MW', data:wdAvg, backgroundColor:'rgba(74,127,165,0.55)', borderColor:'#4a7fa5', borderWidth:2 }]);
 
     // By hour
     const hrBuckets = Array.from({length:24},()=>[]);
     recent.forEach(r => hrBuckets[new Date(r.date).getHours()].push(r.valeurs.demandeTotal));
     const hrAvg = hrBuckets.map(b => b.length ? b.reduce((a,c)=>a+c,0)/b.length : 0);
-    buildLineChart('hourlyChart', Array.from({length:24},(_,i)=>`${i}h`), [{ label:'Moyenne MW', data:hrAvg, borderColor:'#ffc107', backgroundColor:'rgba(255,193,7,0.1)', borderWidth:2, pointRadius:3, tension:0.4 }]);
+    buildLineChart('hourlyChart', Array.from({length:24},(_,i)=>`${i}h`), [{ label:'Moyenne MW', data:hrAvg, borderColor:'#c47a2e', backgroundColor:'rgba(196,122,46,0.1)', borderWidth:2, pointRadius:3, tension:0.4 }]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -927,11 +928,11 @@ function renderProductionCharts() {
 
     const labels   = recent.map(r => xLabel(r.date));
     const datasets = [
-        { label:'Hydraulique', data:recent.map(r=>r.valeurs.hydraulique||0), backgroundColor:'rgba(33,150,243,0.7)',  borderColor:'#2196f3', borderWidth:1 },
-        { label:'Éolien',      data:recent.map(r=>r.valeurs.eolien||0),      backgroundColor:'rgba(76,175,80,0.7)',   borderColor:'#4caf50', borderWidth:1 },
-        { label:'Thermique',   data:recent.map(r=>r.valeurs.thermique||0),   backgroundColor:'rgba(244,67,54,0.7)',   borderColor:'#f44336', borderWidth:1 },
-        { label:'Solaire',     data:recent.map(r=>r.valeurs.solaire||0),     backgroundColor:'rgba(255,193,7,0.7)',   borderColor:'#ffc107', borderWidth:1 },
-        { label:'Autres',      data:recent.map(r=>r.valeurs.autres||0),      backgroundColor:'rgba(158,158,158,0.7)', borderColor:'#9e9e9e', borderWidth:1 }
+        { label:'Hydraulique', data:recent.map(r=>r.valeurs.hydraulique||0), backgroundColor:'rgba(42,111,168,0.65)',  borderColor:'#2a6fa8', borderWidth:1 },
+        { label:'Éolien',      data:recent.map(r=>r.valeurs.eolien||0),      backgroundColor:'rgba(46,139,106,0.65)', borderColor:'#2e8b6a', borderWidth:1 },
+        { label:'Thermique',   data:recent.map(r=>r.valeurs.thermique||0),   backgroundColor:'rgba(158,61,61,0.65)',  borderColor:'#9e3d3d', borderWidth:1 },
+        { label:'Solaire',     data:recent.map(r=>r.valeurs.solaire||0),     backgroundColor:'rgba(196,122,46,0.65)', borderColor:'#c47a2e', borderWidth:1 },
+        { label:'Autres',      data:recent.map(r=>r.valeurs.autres||0),      backgroundColor:'rgba(106,125,142,0.65)',borderColor:'#6a7d8e', borderWidth:1 }
     ].filter(ds => ds.data.some(v => v > 0));
 
     // Y-axis : plancher = 90% du minimum hydraulique (série la plus basse), zéros exclus
@@ -1020,7 +1021,7 @@ function renderExchangeCharts() {
 
     const labels = disp.map(r => xLabel(r.date));
     const values = disp.map(r => r.exportations_total||0);
-    const colors = values.map(v => v>=0 ? '#10b981' : '#f59e0b');
+    const colors = values.map(v => v>=0 ? '#2e8b6a' : '#c47a2e');
     const { text, grid } = chartColors();
 
     destroyChart('exchangeChart');
@@ -1031,7 +1032,7 @@ function renderExchangeCharts() {
             data:{ labels, datasets:[{
                 label:'Flux net', data:values,
                 segment:{ borderColor: ctx => colors[ctx.p0DataIndex] },
-                backgroundColor:'rgba(102,126,234,0.07)',
+                backgroundColor:'rgba(74,127,165,0.07)',
                 borderWidth:2.5, tension:0.25, fill:true, pointRadius:0, pointHoverRadius:6
             }]},
             options:{
@@ -1102,8 +1103,8 @@ async function loadAnalysisTab() {
     });
 
     buildLineChart('pvdChart', labels, [
-        { label:'Demande',    data:demVals, borderColor:'#dc3545', backgroundColor:'rgba(220,53,69,0.08)',  borderWidth:2, pointRadius:0 },
-        { label:'Production', data:proVals, borderColor:'#198754', backgroundColor:'rgba(25,135,84,0.08)', borderWidth:2, pointRadius:0 }
+        { label:'Demande',    data:demVals, borderColor:'#9e3d3d', backgroundColor:'rgba(158,61,61,0.08)',  borderWidth:2, pointRadius:0 },
+        { label:'Production', data:proVals, borderColor:'#2e8b6a', backgroundColor:'rgba(46,139,106,0.08)', borderWidth:2, pointRadius:0 }
     ], true);
 
     // Balance bars
@@ -1115,8 +1116,8 @@ async function loadAnalysisTab() {
         {
             type:'bar',
             data:{ labels, datasets:[{ label:'Bilan', data:balance,
-                backgroundColor: balance.map(v=>v>=0?'rgba(25,135,84,0.6)':'rgba(220,53,69,0.6)'),
-                borderColor:     balance.map(v=>v>=0?'#198754':'#dc3545'),
+                backgroundColor: balance.map(v=>v>=0?'rgba(46,139,106,0.55)':'rgba(158,61,61,0.55)'),
+                borderColor:     balance.map(v=>v>=0?'#2e8b6a':'#9e3d3d'),
                 borderWidth:1 }]},
             options:{
                 responsive:true, maintainAspectRatio:false,
@@ -1133,10 +1134,10 @@ async function loadAnalysisTab() {
     // Donut
     const pv = latestProd;
     const pieLabels=[], pieData=[], pieColors=[];
-    if(pv.hydraulique>0){ pieLabels.push('Hydraulique'); pieData.push(pv.hydraulique); pieColors.push('#2196f3'); }
-    if(pv.eolien>0)     { pieLabels.push('Éolien');      pieData.push(pv.eolien);      pieColors.push('#4caf50'); }
-    if(pv.thermique>0)  { pieLabels.push('Thermique');   pieData.push(pv.thermique);   pieColors.push('#f44336'); }
-    if(pv.solaire>0)    { pieLabels.push('Solaire');     pieData.push(pv.solaire);     pieColors.push('#ffc107'); }
+    if(pv.hydraulique>0){ pieLabels.push('Hydraulique'); pieData.push(pv.hydraulique); pieColors.push('#2a6fa8'); }
+    if(pv.eolien>0)     { pieLabels.push('Éolien');      pieData.push(pv.eolien);      pieColors.push('#2e8b6a'); }
+    if(pv.thermique>0)  { pieLabels.push('Thermique');   pieData.push(pv.thermique);   pieColors.push('#9e3d3d'); }
+    if(pv.solaire>0)    { pieLabels.push('Solaire');     pieData.push(pv.solaire);     pieColors.push('#c47a2e'); }
     if(pv.autres>0)     { pieLabels.push('Autres');      pieData.push(pv.autres);      pieColors.push('#9e9e9e'); }
 
     destroyChart('pieChart');
@@ -1205,25 +1206,25 @@ function buildBarChart(id, labels, datasets) {
 // ─────────────────────────────────────────────────────────────────────────────
 const PROVINCES = [
     { code:'QC', name:'Québec',             cap:37.4, clean:99,
-      sources:[{n:'Hydraulique',p:95,c:'#2196f3'},{n:'Éolien',p:4,c:'#4caf50'},{n:'Autres',p:1,c:'#9e9e9e'}] },
+      sources:[{n:'Hydraulique',p:95,c:'#2a6fa8'},{n:'Éolien',p:4,c:'#2e8b6a'},{n:'Autres',p:1,c:'#7a8fa6'}] },
     { code:'ON', name:'Ontario',            cap:36.8, clean:92,
-      sources:[{n:'Nucléaire',p:34,c:'#9c27b0'},{n:'Hydraulique',p:24,c:'#2196f3'},{n:'Gaz',p:20,c:'#ff9800'},{n:'Éolien',p:15,c:'#4caf50'},{n:'Solaire',p:5,c:'#ffc107'},{n:'Autres',p:2,c:'#9e9e9e'}] },
+      sources:[{n:'Nucléaire',p:34,c:'#4a5fa3'},{n:'Hydraulique',p:24,c:'#2a6fa8'},{n:'Gaz',p:20,c:'#c47a2e'},{n:'Éolien',p:15,c:'#2e8b6a'},{n:'Solaire',p:5,c:'#c47a2e'},{n:'Autres',p:2,c:'#7a8fa6'}] },
     { code:'BC', name:'Colombie-Brit.',     cap:16.0, clean:94,
-      sources:[{n:'Hydraulique',p:87,c:'#2196f3'},{n:'Éolien',p:7,c:'#4caf50'},{n:'Gaz',p:4,c:'#ff9800'},{n:'Autres',p:2,c:'#9e9e9e'}] },
+      sources:[{n:'Hydraulique',p:87,c:'#2a6fa8'},{n:'Éolien',p:7,c:'#2e8b6a'},{n:'Gaz',p:4,c:'#c47a2e'},{n:'Autres',p:2,c:'#7a8fa6'}] },
     { code:'MB', name:'Manitoba',           cap:5.5,  clean:99,
-      sources:[{n:'Hydraulique',p:97,c:'#2196f3'},{n:'Éolien',p:2,c:'#4caf50'},{n:'Autres',p:1,c:'#9e9e9e'}] },
+      sources:[{n:'Hydraulique',p:97,c:'#2a6fa8'},{n:'Éolien',p:2,c:'#2e8b6a'},{n:'Autres',p:1,c:'#7a8fa6'}] },
     { code:'NL', name:'Terre-Neuve',        cap:7.0,  clean:98,
-      sources:[{n:'Hydraulique',p:93,c:'#2196f3'},{n:'Éolien',p:5,c:'#4caf50'},{n:'Autres',p:2,c:'#9e9e9e'}] },
+      sources:[{n:'Hydraulique',p:93,c:'#2a6fa8'},{n:'Éolien',p:5,c:'#2e8b6a'},{n:'Autres',p:2,c:'#7a8fa6'}] },
     { code:'NB', name:'Nouveau-Brunswick',  cap:4.0,  clean:74,
-      sources:[{n:'Hydraulique',p:35,c:'#2196f3'},{n:'Nucléaire',p:23,c:'#9c27b0'},{n:'Éolien',p:16,c:'#4caf50'},{n:'Gaz',p:15,c:'#ff9800'},{n:'Charbon',p:11,c:'#795548'}] },
+      sources:[{n:'Hydraulique',p:35,c:'#2a6fa8'},{n:'Nucléaire',p:23,c:'#4a5fa3'},{n:'Éolien',p:16,c:'#2e8b6a'},{n:'Gaz',p:15,c:'#c47a2e'},{n:'Charbon',p:11,c:'#6b5a4e'}] },
     { code:'PE', name:'Î.-P.-É.',           cap:0.3,  clean:70,
-      sources:[{n:'Éolien',p:60,c:'#4caf50'},{n:'Gaz',p:30,c:'#ff9800'},{n:'Solaire',p:10,c:'#ffc107'}] },
+      sources:[{n:'Éolien',p:60,c:'#2e8b6a'},{n:'Gaz',p:30,c:'#c47a2e'},{n:'Solaire',p:10,c:'#c47a2e'}] },
     { code:'AB', name:'Alberta',            cap:17.5, clean:35,
-      sources:[{n:'Gaz',p:45,c:'#ff9800'},{n:'Éolien',p:25,c:'#4caf50'},{n:'Solaire',p:10,c:'#ffc107'},{n:'Charbon',p:8,c:'#795548'},{n:'Autres',p:12,c:'#9e9e9e'}] },
+      sources:[{n:'Gaz',p:45,c:'#c47a2e'},{n:'Éolien',p:25,c:'#2e8b6a'},{n:'Solaire',p:10,c:'#c47a2e'},{n:'Charbon',p:8,c:'#6b5a4e'},{n:'Autres',p:12,c:'#7a8fa6'}] },
     { code:'SK', name:'Saskatchewan',       cap:4.5,  clean:33,
-      sources:[{n:'Gaz',p:42,c:'#ff9800'},{n:'Charbon',p:25,c:'#795548'},{n:'Éolien',p:18,c:'#4caf50'},{n:'Hydraulique',p:10,c:'#2196f3'},{n:'Solaire',p:5,c:'#ffc107'}] },
+      sources:[{n:'Gaz',p:42,c:'#c47a2e'},{n:'Charbon',p:25,c:'#6b5a4e'},{n:'Éolien',p:18,c:'#2e8b6a'},{n:'Hydraulique',p:10,c:'#2a6fa8'},{n:'Solaire',p:5,c:'#c47a2e'}] },
     { code:'NS', name:'Nouvelle-Écosse',    cap:2.5,  clean:35,
-      sources:[{n:'Charbon',p:40,c:'#795548'},{n:'Éolien',p:25,c:'#4caf50'},{n:'Gaz',p:20,c:'#ff9800'},{n:'Hydraulique',p:10,c:'#2196f3'},{n:'Autres',p:5,c:'#9e9e9e'}] },
+      sources:[{n:'Charbon',p:40,c:'#6b5a4e'},{n:'Éolien',p:25,c:'#2e8b6a'},{n:'Gaz',p:20,c:'#c47a2e'},{n:'Hydraulique',p:10,c:'#2a6fa8'},{n:'Autres',p:5,c:'#7a8fa6'}] },
 ];
 
 // Try Ontario IESO real-time XML feed
@@ -1284,7 +1285,7 @@ async function loadCanadaTab() {
     // ── Province cards ──
     const grid = document.getElementById('provinceGrid');
     grid.innerHTML = PROVINCES.map(p => {
-        const barColor = p.clean >= 80 ? '#4caf50' : p.clean >= 50 ? '#ffc107' : '#f44336';
+        const barColor = p.clean >= 80 ? '#2e8b6a' : p.clean >= 50 ? '#c47a2e' : '#9e3d3d';
         const pills = p.sources.map(s =>
             `<span class="source-pill" style="background:${s.c}22;color:${s.c};border:1px solid ${s.c}44">${s.n} ${s.p}%</span>`
         ).join('');
@@ -1325,8 +1326,8 @@ async function loadCanadaTab() {
                 datasets: [{
                     label: '% électricité propre',
                     data:  sorted.map(p => p.clean),
-                    backgroundColor: sorted.map(p => p.clean >= 80 ? 'rgba(76,175,80,0.75)' : p.clean >= 50 ? 'rgba(255,193,7,0.75)' : 'rgba(244,67,54,0.75)'),
-                    borderColor:     sorted.map(p => p.clean >= 80 ? '#4caf50'               : p.clean >= 50 ? '#ffc107'               : '#f44336'),
+                    backgroundColor: sorted.map(p => p.clean >= 80 ? 'rgba(46,139,106,0.65)' : p.clean >= 50 ? 'rgba(196,122,46,0.65)' : 'rgba(158,61,61,0.65)'),
+                    borderColor:     sorted.map(p => p.clean >= 80 ? '#2e8b6a' : p.clean >= 50 ? '#c47a2e' : '#9e3d3d'),
                     borderWidth: 1, borderRadius: 5
                 }]
             },
@@ -1363,7 +1364,7 @@ const NUCLEAR_PLANTS = [
     {
         id: 'bruce', name: 'Bruce NGS', operator: 'Bruce Power',
         location: 'Tiverton, ON', reactorType: 'CANDU 6 / CANDU 8',
-        color: '#7c3aed',
+        color: '#4a5fa3',
         units: [
             { label:'A-1', nameplate:828, ieso_keys:['BRUCEA-G1'] },
             { label:'A-2', nameplate:828, ieso_keys:['BRUCEA-G2'] },
@@ -1601,13 +1602,13 @@ function resolveUnitMW(unit, ieso, onTotalNameplate, onTotalLive) {
 //  ONTARIO GRID TAB — données IESO complètes (tous types de carburant)
 // ─────────────────────────────────────────────────────────────────────────────
 const FUEL_CONFIG = {
-    NUCLEAR:  { label: 'Nucléaire',   color: '#4f5b9e', order: 0 },  // indigo foncé
-    HYDRO:    { label: 'Hydraulique', color: '#2478b4', order: 1 },  // bleu acier
-    WIND:     { label: 'Éolien',      color: '#3a9e72', order: 2 },  // vert sauge
-    SOLAR:    { label: 'Solaire',     color: '#c8952e', order: 3 },  // ambre doré
-    GAS:      { label: 'Gaz naturel', color: '#b84848', order: 4 },  // rouge atténué
-    BIOFUEL:  { label: 'Bioénergie',  color: '#6e8f35', order: 5 },  // olive
-    OTHER:    { label: 'Autre',       color: '#7a8fa6', order: 6 },  // gris ardoise
+    NUCLEAR:  { label: 'Nucléaire',   color: '#4a5fa3', order: 0 },  // ardoise-indigo
+    HYDRO:    { label: 'Hydraulique', color: '#2a6fa8', order: 1 },  // bleu acier
+    WIND:     { label: 'Éolien',      color: '#2e8b6a', order: 2 },  // vert forêt
+    SOLAR:    { label: 'Solaire',     color: '#c47a2e', order: 3 },  // ambre foncé
+    GAS:      { label: 'Gaz naturel', color: '#9e3d3d', order: 4 },  // bordeaux
+    BIOFUEL:  { label: 'Bioénergie',  color: '#5a7a2a', order: 5 },  // olive foncé
+    OTHER:    { label: 'Autre',       color: '#6a7d8e', order: 6 },  // gris bleuté
 };
 
 let ontarioGridData = [];   // array of daily JSON objects, sorted by date
@@ -1946,7 +1947,7 @@ async function loadNuclearTab() {
             const pct = u.mw != null ? Math.min(100, Math.round((u.mw / u.nameplate) * 100)) : 0;
             const fillClass = u.refurb ? 'refurb' : (u.mw === 0 || u.mw == null ? 'offline' : '');
             const mwText = u.mw != null ? u.mw.toLocaleString('fr-CA') + ' MW' : '--';
-            const statusLabel = u.refurb ? '<span style="font-size:0.6rem;color:#2196f3">Réfection</span>' : `<span class="unit-nom">/${u.nameplate} MW</span>`;
+            const statusLabel = u.refurb ? '<span style="font-size:0.6rem;color:#2a6fa8">Réfection</span>' : `<span class="unit-nom">/${u.nameplate} MW</span>`;
             return `
             <div class="unit-row">
                 <span class="unit-label">${u.label}</span>
@@ -2071,7 +2072,7 @@ function showPlantChart(plantId) {
     const xLabels = hours.map(h => `H${h}`);
 
     // Une ligne par unité — on filtre les unités avec au moins une valeur
-    const COLORS = ['#7c3aed','#2196f3','#4caf50','#ff9800','#e91e63','#00bcd4','#ff5722','#9c27b0'];
+    const COLORS = ['#4a5fa3','#2a6fa8','#2e8b6a','#c47a2e','#9e3d3d','#3a7d8e','#7a6a2e','#6a7d8e'];
     const datasets = resolved
         .filter(u => u.mwHours && u.mwHours.some(v => v != null && v > 0))
         .map((u, i) => ({
@@ -2094,8 +2095,8 @@ function showPlantChart(plantId) {
     datasets.push({
         label: 'Total centrale',
         data: plantTotalByHour,
-        borderColor: '#f59e0b',
-        backgroundColor: 'rgba(245,158,11,0.08)',
+        borderColor: '#c47a2e',
+        backgroundColor: 'rgba(196,122,46,0.08)',
         borderWidth: 2.5,
         borderDash: [5, 3],
         pointRadius: 0,
