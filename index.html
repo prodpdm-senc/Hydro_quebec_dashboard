@@ -571,8 +571,14 @@
                 <div class="card mb-3">
                     <div class="chart-container" style="height:360px; padding:16px 16px 12px">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0">Mix de production Ontario — 7 derniers jours (horaire)</h6>
-                            <span id="on-grid-status" style="font-size:0.75rem; color:var(--text-secondary)"></span>
+                            <h6 class="mb-0" id="onHistoryTitle">Mix de production Ontario — 7 derniers jours (horaire)</h6>
+                            <div class="d-flex align-items-center gap-2">
+                                <span id="on-grid-status" style="font-size:0.75rem; color:var(--text-secondary)"></span>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-secondary" id="onBtn2j" onclick="switchOntarioPeriod(2)">2 j</button>
+                                    <button type="button" class="btn btn-outline-secondary active" id="onBtn7j" onclick="switchOntarioPeriod(7)">7 j</button>
+                                </div>
+                            </div>
                         </div>
                         <canvas id="onGridHistoryChart"></canvas>
                     </div>
@@ -1659,6 +1665,18 @@ async function fetchOntarioGrid() {
     return loaded;
 }
 
+let ontarioPeriodDays = 7;   // 2 or 7
+
+function switchOntarioPeriod(days) {
+    ontarioPeriodDays = days;
+    document.getElementById('onBtn2j').classList.toggle('active', days === 2);
+    document.getElementById('onBtn7j').classList.toggle('active', days === 7);
+    const label = days === 2 ? '2 derniers jours' : '7 derniers jours';
+    document.getElementById('onHistoryTitle').textContent =
+        `Mix de production Ontario — ${label} (horaire)`;
+    renderOntarioGrid(ontarioGridData);
+}
+
 function renderOntarioGrid(dailyData) {
     const { text: labelColor, grid: gridColor } = chartColors();
     if (!dailyData || dailyData.length === 0) {
@@ -1691,12 +1709,17 @@ function renderOntarioGrid(dailyData) {
     document.getElementById('on-grid-status').textContent = `✅ ${dailyData.length} jour(s) · mis à jour il y a ${ageMin} min`;
 
     // ── Build combined time series (all days concatenated) ──
+    // Filter to selected period
+    const periodData = ontarioPeriodDays >= 7
+        ? dailyData
+        : dailyData.slice(-ontarioPeriodDays);
+
     const allLabels  = [];
     const fuelSeries = {};    // fuel -> flat MW array
 
     Object.keys(FUEL_CONFIG).forEach(f => fuelSeries[f] = []);
 
-    dailyData.forEach(day => {
+    periodData.forEach(day => {
         const hours = day.hours || [];
         hours.forEach((h, i) => {
             const label = `${day.date} H${String(h).padStart(2,'0')}`;
@@ -1723,7 +1746,7 @@ function renderOntarioGrid(dailyData) {
             fill:            true,
             tension:         0.3,
             pointRadius:     0,
-            pointHoverRadius: 0,
+            pointHoverRadius: 5,
         }));
 
     // Tick labels: only show at day boundaries (H01)
@@ -1737,6 +1760,7 @@ function renderOntarioGrid(dailyData) {
             options: {
                 responsive: true, maintainAspectRatio: false,
                 animation: false,
+                interaction: { mode: 'index', intersect: false },
                 scales: {
                     x: {
                         ticks: {
@@ -1758,9 +1782,14 @@ function renderOntarioGrid(dailyData) {
                 plugins: {
                     legend: { position: 'top', labels: { boxWidth: 16, boxHeight: 10, padding: 14, color: labelColor, font: { size: 12 } }},
                     tooltip: {
+                        mode: 'index', intersect: false,
                         callbacks: {
-                            title: items => items[0].label,
-                            label: item => ` ${item.dataset.label}: ${Math.round(item.raw).toLocaleString('fr-CA')} MW`
+                            title: items => items[0].label.replace(' H', ' — H'),
+                            label: item => ` ${item.dataset.label}: ${Math.round(item.raw).toLocaleString('fr-CA')} MW`,
+                            footer: items => {
+                                const total = items.reduce((s, i) => s + (i.raw || 0), 0);
+                                return `  Total : ${Math.round(total).toLocaleString('fr-CA')} MW`;
+                            }
                         }
                     }
                 }
@@ -1797,6 +1826,7 @@ function renderOntarioGrid(dailyData) {
             options: {
                 responsive: true, maintainAspectRatio: false,
                 animation: false,
+                interaction: { mode: 'index', intersect: false },
                 scales: {
                     x: {
                         ticks: { color: labelColor, maxTicksLimit: 12 },
@@ -1812,8 +1842,13 @@ function renderOntarioGrid(dailyData) {
                 plugins: {
                     legend: { position: 'top', labels: { boxWidth: 16, boxHeight: 10, padding: 14, color: labelColor, font: { size: 12 } }},
                     tooltip: {
+                        mode: 'index', intersect: false,
                         callbacks: {
-                            label: item => ` ${item.dataset.label}: ${Math.round(item.raw).toLocaleString('fr-CA')} MW`
+                            label: item => ` ${item.dataset.label}: ${Math.round(item.raw).toLocaleString('fr-CA')} MW`,
+                            footer: items => {
+                                const total = items.reduce((s, i) => s + (i.raw || 0), 0);
+                                return `  Total : ${Math.round(total).toLocaleString('fr-CA')} MW`;
+                            }
                         }
                     }
                 }
