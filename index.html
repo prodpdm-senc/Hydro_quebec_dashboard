@@ -255,6 +255,122 @@
             background: linear-gradient(90deg, #4a5fa3, #5a7ab8);
             transition: width 0.9s ease;
         }
+
+        /* ══════════════════════════════════════════════════════════
+           RESPONSIVE — MOBILE  (≤ 768px)
+           ══════════════════════════════════════════════════════════ */
+        @media (max-width: 768px) {
+
+            /* Body & layout */
+            body { padding: 10px; }
+            .container-fluid { max-width: 100% !important; }
+
+            /* Header */
+            .header { margin-bottom: 14px; }
+            .header h1 { font-size: 1.3rem; }
+            .header p  { font-size: 0.82rem; }
+            .header-actions { gap: 6px; }
+            .header-btn { padding: 6px 10px; font-size: 0.95rem; }
+
+            /* Nav pills — horizontal scroll, no wrap */
+            #mainTabs {
+                flex-wrap: nowrap !important;
+                overflow-x: auto;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                justify-content: flex-start !important;
+                padding-bottom: 4px;
+                gap: 0;
+            }
+            #mainTabs::-webkit-scrollbar { display: none; }
+            #mainTabs .nav-item { flex: 0 0 auto; }
+            #mainTabs .nav-link {
+                font-size: 0.78rem;
+                padding: 6px 10px;
+                margin: 0 2px;
+                white-space: nowrap;
+            }
+            /* No hover lift on touch */
+            #mainTabs .nav-link:hover { transform: none; }
+
+            /* Period bar */
+            .period-bar { gap: 5px; margin-bottom: 12px; }
+            .period-bar span { font-size: 0.78rem; }
+            .period-btn { padding: 4px 11px; font-size: 0.78rem; }
+
+            /* Cards */
+            .card { margin-bottom: 12px; border-radius: 10px; }
+            .card:hover { transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+            /* Stat cards */
+            .stat-card { padding: 12px 8px; }
+            .stat-value { font-size: 1.45rem; margin: 4px 0; }
+            .stat-label { font-size: 0.74rem; }
+            .stat-time  { font-size: 0.72rem; }
+
+            /* Charts — override inline styles with !important */
+            .chart-container      { height: 240px !important; padding: 10px 8px 40px 8px !important; }
+            .chart-container-sm   { height: 210px !important; padding: 10px 8px 40px 8px !important; }
+            .chart-container-tall { height: 280px !important; padding: 10px 8px 40px 8px !important; }
+            /* Ontario charts with explicit inline heights */
+            #tab-ontario .chart-container[style] { height: 260px !important; padding: 10px 8px 40px 8px !important; }
+            .chart-container h6,
+            .chart-container-sm h6,
+            .chart-container-tall h6 { font-size: 0.82rem; margin-bottom: 4px !important; }
+
+            /* Section headings */
+            h5 { font-size: 0.95rem; }
+            h6 { font-size: 0.82rem; }
+
+            /* Province grid — 2 cols on mobile */
+            .province-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 8px;
+            }
+            .province-card { padding: 10px 12px; }
+            .province-code { font-size: 1.4rem; }
+            .province-cap  { font-size: 0.9rem; }
+
+            /* Nuclear grid — single column */
+            .nuclear-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            .nuclear-card:hover { transform: none; }
+            .plant-chart-container { height: 230px; }
+
+            /* Ontario period bar buttons */
+            #ontarioPeriodBar { gap: 5px; }
+
+            /* Ontario chart header — stack vertically */
+            #tab-ontario .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 6px;
+            }
+            #tab-ontario .d-flex.justify-content-between .d-flex { flex-direction: row; }
+            #onBtn2j, #onBtn7j { font-size: 0.75rem; padding: 2px 10px; }
+
+            /* Tab action buttons */
+            .tab-actions { gap: 8px; margin-top: 8px; }
+            .tab-actions .btn { font-size: 0.82rem; padding: 6px 12px; }
+
+            /* Debug box */
+            .debug { font-size: 0.75rem; }
+
+            /* Modal full-screen on mobile */
+            .modal-dialog { margin: 0.5rem; }
+            .modal-content { border-radius: 10px; }
+        }
+
+        /* Extra small phones (≤ 400px) */
+        @media (max-width: 400px) {
+            .header h1 { font-size: 1.1rem; }
+            #mainTabs .nav-link { font-size: 0.72rem; padding: 5px 8px; }
+            .stat-value { font-size: 1.2rem; }
+            .province-grid { grid-template-columns: 1fr 1fr; }
+        }
     </style>
 </head>
 <body>
