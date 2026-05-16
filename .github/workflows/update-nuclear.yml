@@ -83,6 +83,22 @@ jobs:
           total_mw = sum(arr[-1] for arr in nuclear['units'].values() if arr)
           print(f"nuclear.json saved: {nuclear['updated']} | {len(nuclear['units'])} units | {len(nuclear['hours'])} hours | {total_mw} MW")
 
+          # ── Fetch Ontario total output ──
+          ontario_total = None
+          try:
+              print("Fetching Ontario total output...")
+              ieso_url = 'https://reports.ieso.ca/public/RealtimeConstTotals/PUB_RealtimeConstTotals.xml'
+              req = urllib.request.Request(ieso_url, headers={'User-Agent': 'Mozilla/5.0'})
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  ieso_xml = resp.read()
+              ieso_root = ET.fromstring(ieso_xml)
+              total_el = ieso_root.find('.//TotalOutput') or ieso_root.find('.//MarketDemand') or ieso_root.find('.//TotalEnergy')
+              if total_el is not None:
+                  ontario_total = int(float(total_el.text))
+                  print(f"Ontario total output: {ontario_total} MW")
+          except Exception as e:
+              print(f"Could not fetch Ontario total: {e}")
+
           # ── history.json : rolling 7 jours, résolution 30 min ───────────────
           PLANT_GROUPS = {
               'bruce':      ['BRUCEA-G1','BRUCEA-G2','BRUCEA-G3','BRUCEA-G4',
@@ -112,6 +128,10 @@ jobs:
               snapshot[plant] = mw
               snapshot['total'] += mw
 
+          # Add Ontario total output if available
+          if ontario_total is not None:
+              snapshot['ontario_total'] = ontario_total
+
           history['data'].append(snapshot)
           history['updated'] = snapshot['ts']
 
@@ -123,7 +143,10 @@ jobs:
           with open(history_file, 'w') as f:
               json.dump(history, f, separators=(',', ':'))
 
-          print(f"history.json saved: {len(history['data'])} entries | latest total {snapshot['total']} MW")
+          status_msg = f"history.json saved: {len(history['data'])} entries | nuclear {snapshot['total']} MW"
+          if ontario_total is not None:
+              status_msg += f" | Ontario total {ontario_total} MW"
+          print(status_msg)
           PYEOF
 
       - name: Commit and push if data changed
