@@ -373,6 +373,8 @@
         }
     </style>
 </head>
+# Add script reference before </head>
+    <script src="storage-manager.js"></script>
 <body>
 <div class="container-fluid" style="max-width:1300px">
 
@@ -950,6 +952,8 @@ async function loadDemandTab() {
         const now = new Date();
         // Store up to 7 days (672 pts at 15-min intervals)
         store.demand = json.details.filter(r => new Date(r.date) <= now).slice(-672);
+        // Persist to 7-day rolling storage
+        StorageManager.saveBatch(store.demand.map(d => ({ type: "demand", date: d.date, valeurs: d.valeurs })));
 
         // ── Use indexDonneePlusRecent for current value (reliable) ──
         const cur = json.details[json.indexDonneePlusRecent];
@@ -1025,6 +1029,8 @@ async function loadProductionTab() {
                     (v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0) > 0;
             })
             .slice(-672);
+        // Persist to 7-day rolling storage
+        StorageManager.saveBatch(store.production.map(d => ({ type: "production", date: d.date, valeurs: d.valeurs })));
 
         // ── Use indexDonneePlusRecent, walk back to find valid record ──
         let curIdx = json.indexDonneePlusRecent;
@@ -1132,6 +1138,8 @@ async function loadExchangeTab() {
 
         // Store up to 7 days (newest-first sorted, then reverse for chronological order)
         store.exchange = arr.slice(0, 672).reverse();
+        // Persist to 7-day rolling storage
+        StorageManager.saveBatch(store.exchange.map(d => ({ type: "exchange", date: d.date, valeurs: d })));
 
         renderExchangeCharts();
         document.getElementById('corsNote').style.display = 'none';
@@ -2380,6 +2388,7 @@ setInterval(() => {
 //  INIT — demand is critical, rest loads lazily
 // ─────────────────────────────────────────────────────────────────────────────
 (async () => {
+    StorageManager.init();
     log('🚀 Initialisation dashboard ');
     try {
         await loadCanadaTab();
