@@ -1368,27 +1368,25 @@ const PROVINCES = [
 // Try Ontario IESO real-time XML feed
 async function fetchOntarioIESO() {
     try {
-        const url = 'http://localhost:3001/api/ieso/realtime';
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        // Use GitHub cache instead of direct IESO API (which requires SAML auth)
+        const res = await fetch(NUCLEAR_CACHE_URL, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        const doc  = new DOMParser().parseFromString(text, 'text/xml');
+        const data = await res.json();
 
-        // IESO XML: sum all FuelTotal > EnergyMW or Output elements
+        // Sum all nuclear units in Ontario
         let total = 0;
-        doc.querySelectorAll('FuelTotal').forEach(ft => {
-            const mw = parseFloat(ft.querySelector('EnergyMW,Output')?.textContent || '0');
-            if (!isNaN(mw) && mw > 0) total += mw;
-        });
-        // Fallback: TotalEnergy or MarketDemand
-        if (total === 0) {
-            const td = doc.querySelector('TotalEnergy,MarketDemand,Demand');
-            total = parseFloat(td?.textContent || '0');
+        if (data.units) {
+            for (const [name, mwArray] of Object.entries(data.units)) {
+                if (Array.isArray(mwArray) && mwArray.length > 0) {
+                    total += mwArray[mwArray.length - 1] || 0;  // Last value = latest MW
+                }
+            }
         }
-        log(`✅ Ontario IESO: ${Math.round(total)} MW`);
+
+        log(`✅ Ontario IESO (cache GitHub): ${Math.round(total)} MW`);
         return total > 0 ? total : null;
     } catch(e) {
-        log(`⚠️ Ontario IESO non accessible (${e.message})`, true);
+        log(`⚠️ Ontario IESO cache indisponible (${e.message})`, true);
         return null;
     }
 }
