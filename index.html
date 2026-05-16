@@ -767,9 +767,9 @@
 //  STATE
 // ─────────────────────────────────────────────────────────────────────────────
 const URLS = {
-    demand:     'https://www.hydroquebec.com/data/documents-donnees/donnees-ouvertes/json/demande.json',
-    production: 'https://www.hydroquebec.com/data/documents-donnees/donnees-ouvertes/json/production.json',
-    exchange:   'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/importations-exportations-avec-transits/exports/json?lang=fr&limit=2000'
+    demand:     'http://localhost:3001/api/hydro-quebec/demande',
+    production: 'http://localhost:3001/api/hydro-quebec/production',
+    exchange:   'http://localhost:3001/api/hydro-quebec/exchange'
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -777,7 +777,7 @@ const URLS = {
 //  Essaie d'abord en direct ; si CORS bloque (TypeError), relance via proxy.
 //  Le proxy corsproxy.io transfère les headers et retourne la vraie réponse.
 // ─────────────────────────────────────────────────────────────────────────────
-const CORS_PROXY = 'https://corsproxy.io/?';
+const CORS_PROXY = 'http://localhost:3001/proxy?url=';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  GITHUB CACHE — données IESO servies via raw.githubusercontent.com (CORS ✅)
@@ -1368,7 +1368,7 @@ const PROVINCES = [
 // Try Ontario IESO real-time XML feed
 async function fetchOntarioIESO() {
     try {
-        const url = 'https://reports.ieso.ca/public/RealtimeConstTotals/PUB_RealtimeConstTotals.xml';
+        const url = 'http://localhost:3001/api/ieso/realtime';
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();

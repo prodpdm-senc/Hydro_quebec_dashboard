@@ -1,0 +1,26 @@
+{
+  "name": "hydro_quebec_dashboard",
+  "version": "1.0.0",
+  "description": "Readme",
+  "main": "proxy-server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prodpdm-senc/Hydro_quebec_dashboard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/prodpdm-senc/Hydro_quebec_dashboard/issues"
+  },
+  "homepage": "https://github.com/prodpdm-senc/Hydro_quebec_dashboard#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2"
+  }
+}
