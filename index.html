@@ -372,6 +372,7 @@
             .province-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
+    <script src="storage-integration.js"></script>
 </head>
 # Add script reference before </head>
     <script src="storage-manager.js"></script>
@@ -460,7 +461,7 @@
                     </div></div></div>
                 </div>
                 <div class="tab-actions">
-                    <button class="btn btn-light" onclick="loadDemandTab()">🔄 Actualiser</button>
+                    <button class="btn btn-light" onclick="loadDemandTabWithHistory()">🔄 Actualiser</button>
                     <button class="btn btn-success" onclick="exportCSV('demand')">📥 Export CSV</button>
                 </div>
             </div>
@@ -494,7 +495,7 @@
                     <canvas id="productionChart"></canvas>
                 </div></div>
                 <div class="tab-actions">
-                    <button class="btn btn-light" onclick="loadProductionTab()">🔄 Actualiser</button>
+                    <button class="btn btn-light" onclick="loadProductionTabWithHistory()">🔄 Actualiser</button>
                     <button class="btn btn-success" onclick="exportCSV('production')">📥 Export CSV</button>
                 </div>
             </div>
@@ -531,7 +532,7 @@
                     <canvas id="exchangeChart"></canvas>
                 </div></div>
                 <div class="tab-actions">
-                    <button class="btn btn-light" onclick="loadExchangeTab()">🔄 Actualiser</button>
+                    <button class="btn btn-light" onclick="loadExchangeTabWithHistory()">🔄 Actualiser</button>
                     <button class="btn btn-success" onclick="exportCSV('exchange')">📥 Export CSV</button>
                 </div>
             </div>
@@ -942,7 +943,7 @@ function fmtDate(d) { return new Date(d).toLocaleString('fr-CA',{month:'short',d
 // ─────────────────────────────────────────────────────────────────────────────
 //  DEMAND TAB
 // ─────────────────────────────────────────────────────────────────────────────
-async function loadDemandTab() {
+async function loadDemandTabWithHistory() {
     log('🔄 Chargement Demande');
     try {
         const res  = await corsGet(URLS.demand);
@@ -1013,7 +1014,7 @@ function renderDemandCharts() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  PRODUCTION TAB
 // ─────────────────────────────────────────────────────────────────────────────
-async function loadProductionTab() {
+async function loadProductionTabWithHistory() {
     log('🔄 Chargement Production');
     try {
         const res  = await corsGet(URLS.production);
@@ -1110,7 +1111,7 @@ function renderProductionCharts() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  EXCHANGE TAB  (non-critical: CORS may fail silently)
 // ─────────────────────────────────────────────────────────────────────────────
-async function loadExchangeTab() {
+async function loadExchangeTabWithHistory() {
     log('🔄 Chargement Échanges');
     try {
         const res = await corsGet(URLS.exchange);
@@ -1199,7 +1200,7 @@ async function loadAnalysisTab() {
 
     // Ensure base data is loaded first
     if (!store.demand.length || !store.production.length) {
-        await Promise.all([loadDemandTab(), loadProductionTab(), loadExchangeTab()]);
+        await Promise.all([loadDemandTabWithHistory(), loadProductionTabWithHistory(), loadExchangeTabWithHistory()]);
     }
 
     // ── Synchronize demand & production on matching timestamps (from period-sliced data) ──
@@ -1396,7 +1397,7 @@ async function loadCanadaTab() {
     log('🔄 Chargement Canada');
 
     // Ensure QC production data is available
-    if (!store.production.length) await loadProductionTab();
+    if (!store.production.length) await loadProductionTabWithHistory();
 
     // ── QC real-time ──
     let qcLiveMW = null;
@@ -2362,9 +2363,9 @@ document.querySelectorAll('.period-btn').forEach(btn => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  TAB SWITCHING — lazy load
 // ─────────────────────────────────────────────────────────────────────────────
-document.getElementById('btn-demand').addEventListener('shown.bs.tab',     () => { if(!store.demand.length)     loadDemandTab(); });
-document.getElementById('btn-production').addEventListener('shown.bs.tab', () => { if(!store.production.length) loadProductionTab(); });
-document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () => { if(!store.exchange.length)   loadExchangeTab(); });
+document.getElementById('btn-demand').addEventListener('shown.bs.tab',     () => { if(!store.demand.length)     loadDemandTabWithHistory(); });
+document.getElementById('btn-production').addEventListener('shown.bs.tab', () => { if(!store.production.length) loadProductionTabWithHistory(); });
+document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () => { if(!store.exchange.length)   loadExchangeTabWithHistory(); });
 document.getElementById('btn-analysis').addEventListener('shown.bs.tab',   () => { loadAnalysisTab(); });
 document.getElementById('btn-canada').addEventListener('shown.bs.tab',     () => { loadCanadaTab(); });
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
@@ -2375,9 +2376,9 @@ document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () =>
 // ─────────────────────────────────────────────────────────────────────────────
 setInterval(() => {
     const active = document.querySelector('.nav-link.active')?.id;
-    if (active === 'btn-demand')          loadDemandTab();
-    else if (active === 'btn-production') loadProductionTab();
-    else if (active === 'btn-exchange')   loadExchangeTab();
+    if (active === 'btn-demand')          loadDemandTabWithHistory();
+    else if (active === 'btn-production') loadProductionTabWithHistory();
+    else if (active === 'btn-exchange')   loadExchangeTabWithHistory();
     else if (active === 'btn-analysis')   loadAnalysisTab();
     else if (active === 'btn-canada')     loadCanadaTab();
     else if (active === 'btn-nuclear')    loadNuclearTab();
@@ -2389,6 +2390,7 @@ setInterval(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 (async () => {
     StorageManager.init();
+    loadHistoricalDataToStore();
     log('🚀 Initialisation dashboard ');
     try {
         await loadCanadaTab();
