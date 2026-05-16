@@ -1369,24 +1369,25 @@ const PROVINCES = [
 async function fetchOntarioIESO() {
     try {
         // Use GitHub cache instead of direct IESO API (which requires SAML auth)
-        const res = await fetch(NUCLEAR_CACHE_URL, { signal: AbortSignal.timeout(8000) });
+        const res = await fetch(`${_ghBase}/data/history.json`, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        // Sum all nuclear units in Ontario
-        let total = 0;
-        if (data.units) {
-            for (const [name, mwArray] of Object.entries(data.units)) {
-                if (Array.isArray(mwArray) && mwArray.length > 0) {
-                    total += mwArray[mwArray.length - 1] || 0;  // Last value = latest MW
-                }
-            }
+        // Get the latest entry with Ontario total output
+        if (data.data && data.data.length > 0) {
+            const latest = data.data[data.data.length - 1];
+
+            // Use ontario_total if available (total output), otherwise fall back to nuclear total
+            const total = latest.ontario_total || latest.total;
+
+            const type = latest.ontario_total ? 'total output' : 'nucléaire';
+            log(`✅ Ontario IESO (${type}): ${Math.round(total)} MW`);
+            return total > 0 ? total : null;
         }
 
-        log(`✅ Ontario IESO (cache GitHub): ${Math.round(total)} MW`);
-        return total > 0 ? total : null;
+        throw new Error('No data in history.json');
     } catch(e) {
-        log(`⚠️ Ontario IESO cache indisponible (${e.message})`, true);
+        log(`⚠️ Ontario IESO indisponible (${e.message})`, true);
         return null;
     }
 }
