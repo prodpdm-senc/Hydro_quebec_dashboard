@@ -2214,8 +2214,12 @@ async function showPlantChart(plantId) {
             console.warn('Could not fetch nuclear.json for fallback:', e);
         }
 
+        // Keep only last 3 days (144 snapshots at 30-min intervals) to show real unit-level data
+        const MAX_POINTS = 144; // 3 days × 48 snapshots/day
+        const recentData = histData.data.slice(-MAX_POINTS);
+
         let dataPointsAdded = 0;
-        histData.data.forEach((snapshot, idx) => {
+        recentData.forEach((snapshot, idx) => {
             labels.push(xLabel(snapshot.ts));
             const plantData = snapshot.plants?.[plantId];
             if (plantData?.units) {
@@ -2265,7 +2269,7 @@ async function showPlantChart(plantId) {
         });
 
         wrap.innerHTML = `<div class="plant-chart-container"><canvas id="plantHourlyChart"></canvas></div>`;
-        document.getElementById('plantModalSource').textContent = `Historique 7 jours · résolution 30 min`;
+        document.getElementById('plantModalSource').textContent = `Historique 3 jours · résolution 30 min`;
 
         destroyChart('plantHourlyChart');
         charts['plantHourlyChart'] = new Chart(
