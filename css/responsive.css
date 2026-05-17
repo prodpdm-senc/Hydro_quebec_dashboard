@@ -90,6 +90,49 @@
     .nuclear-card:hover { transform: none; }
     .plant-chart-container { height: 230px; }
 
+    /* Production grid — 2 columns on mobile */
+    .production-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .production-card {
+        padding: 12px;
+    }
+
+    .production-card:hover { transform: none; }
+
+    .production-value { font-size: 1.3rem; }
+    .production-label { font-size: 0.7rem; }
+    .production-percent { font-size: 0.8rem; }
+
+    /* Nuclear plants grid — 2 columns on mobile */
+    .nuclear-plants-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .nuclear-plant-card {
+        padding: 12px;
+    }
+
+    .nuclear-plant-card:hover { transform: none; }
+
+    .plant-name { font-size: 0.95rem; }
+    .plant-capacity { font-size: 0.85rem; }
+
+    /* Exchange partners grid — 2 columns on mobile */
+    .exchange-partners {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .exchange-partner-card {
+        padding: 12px;
+    }
+
+    .exchange-partner-card:hover { transform: none; }
+
     /* Ontario period bar buttons */
     #ontarioPeriodBar { gap: 5px; }
 
@@ -122,4 +165,13 @@
     #mainTabs .nav-link { font-size: 0.72rem; padding: 5px 8px; }
     .stat-value { font-size: 1.2rem; }
     .province-grid { grid-template-columns: 1fr 1fr; }
+
+    /* Single column grids on extra small screens */
+    .production-grid { grid-template-columns: 1fr; }
+    .nuclear-plants-grid { grid-template-columns: 1fr; }
+    .exchange-partners { grid-template-columns: 1fr; }
+
+    .stat-card { padding: 10px 6px; }
+    .stat-value { font-size: 1.1rem; }
+    .chart-container { height: 200px !important; }
 }
