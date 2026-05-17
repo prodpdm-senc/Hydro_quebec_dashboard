@@ -2214,17 +2214,28 @@ async function showPlantChart(plantId) {
             console.warn('Could not fetch nuclear.json for fallback:', e);
         }
 
-        // Filter to only snapshots with real unit-level data (no estimates)
-        const realData = histData.data.filter(s => s.plants?.[plantId]?.units);
-
-        realData.forEach((snapshot) => {
+        // Show all data: real (unit-level) + fallback (estimated from plant totals)
+        histData.data.forEach((snapshot, idx) => {
             labels.push(xLabel(snapshot.ts));
-            const plantData = snapshot.plants[plantId];
-            unitNames.forEach(u => {
-                unitDataMap[u].push(plantData.units[u] || 0);
-            });
+            const plantData = snapshot.plants?.[plantId];
+            if (plantData?.units) {
+                // Real data: individual unit values
+                unitNames.forEach(u => {
+                    unitDataMap[u].push(plantData.units[u] || 0);
+                });
+            } else {
+                // Fallback: distribute plant total evenly (for older snapshots without unit data)
+                const plantTotal = snapshot[plantId] || 0;
+                const perUnit = Math.round(plantTotal / unitNames.length);
+                unitNames.forEach(u => {
+                    unitDataMap[u].push(perUnit);
+                });
+            }
         });
-        console.log(`[${plantId}] Real data points: ${labels.length} (${realData.length} snapshots with unit-level data)`);
+
+        const realCount = histData.data.filter(s => s.plants?.[plantId]?.units).length;
+        const fallbackCount = histData.data.length - realCount;
+        console.log(`[${plantId}] Real: ${realCount} snapshots, Fallback: ${fallbackCount} snapshots`);
 
         // Colors
         const colors = ['#4a5fa3', '#2a6fa8', '#2e8b6a', '#c47a2e', '#8a3a5a', '#3a7d8e', '#b84848', '#4a5fa3'];
@@ -2234,13 +2245,14 @@ async function showPlantChart(plantId) {
             borderColor: colors[i % colors.length],
             backgroundColor: 'transparent',
             borderWidth: 1.5,
-            tension: 0.25,
-            pointRadius: 0,
-            pointHoverRadius: 4
+            tension: 0.3,
+            pointRadius: 2,
+            pointHoverRadius: 6,
+            pointBackgroundColor: colors[i % colors.length]
         }));
 
-        // Plant total as bold dashed line (real data only)
-        const plantTotals = realData.map(s => s.plants[plantId].total);
+        // Plant total as bold dashed line
+        const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || s[plantId] || 0);
         datasets.push({
             label: 'Total centrale',
             data: plantTotals,
@@ -2254,7 +2266,7 @@ async function showPlantChart(plantId) {
         });
 
         wrap.innerHTML = `<div class="plant-chart-container"><canvas id="plantHourlyChart"></canvas></div>`;
-        document.getElementById('plantModalSource').textContent = `Données réelles IESO · résolution 30 min`;
+        document.getElementById('plantModalSource').textContent = `${realCount} h réelles IESO + ${fallbackCount} h estimation · résolution 30 min`;
 
         destroyChart('plantHourlyChart');
         charts['plantHourlyChart'] = new Chart(
@@ -2265,9 +2277,10 @@ async function showPlantChart(plantId) {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: { position: 'top', labels: { color: ct, font: { size: 11 }, padding: 12 } },
-                        tooltip: { callbacks: { label: c => c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString('fr-CA') + ' MW' } }
+                        tooltip: { enabled: true, callbacks: { label: c => c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString('fr-CA') + ' MW' } }
                     },
                     scales: {
                         x: { grid: { display: false }, ticks: { color: ct, maxRotation: 0, maxTicksLimit: 10, font: { size: 10 } } },
