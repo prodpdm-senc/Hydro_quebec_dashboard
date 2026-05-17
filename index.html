@@ -766,10 +766,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  STATE
 // ─────────────────────────────────────────────────────────────────────────────
-const URLS = {
+// Detect if running locally or on GitHub Pages
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const URLS = isLocalhost ? {
+    // Local development — use local proxy server
     demand:     'http://localhost:3001/api/hydro-quebec/demande',
     production: 'http://localhost:3001/api/hydro-quebec/production',
     exchange:   'http://localhost:3001/api/hydro-quebec/exchange'
+} : {
+    // GitHub Pages — use direct APIs (they'll fail with CORS, but proxy will catch and retry)
+    demand:     'https://www.hydroquebec.com/data/documents-donnees/donnees-ouvertes/json/demande.json',
+    production: 'https://www.hydroquebec.com/data/documents-donnees/donnees-ouvertes/json/production.json',
+    exchange:   'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/importations-exportations-avec-transits/exports/json?lang=fr&limit=2000'
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -777,7 +785,7 @@ const URLS = {
 //  Essaie d'abord en direct ; si CORS bloque (TypeError), relance via proxy.
 //  Le proxy corsproxy.io transfère les headers et retourne la vraie réponse.
 // ─────────────────────────────────────────────────────────────────────────────
-const CORS_PROXY = 'http://localhost:3001/proxy?url=';
+const CORS_PROXY = isLocalhost ? 'http://localhost:3001/proxy?url=' : 'https://corsproxy.io/?';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  GITHUB CACHE — données IESO servies via raw.githubusercontent.com (CORS ✅)
