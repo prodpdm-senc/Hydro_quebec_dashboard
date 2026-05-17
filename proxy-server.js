@@ -5,6 +5,8 @@
 
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
+const crypto = require('crypto');
 // Node.js 18+ a fetch natif, sinon on utilise node-fetch
 const nodeFetch = require('node-fetch');
 const fetch = globalThis.fetch || nodeFetch;
@@ -13,8 +15,19 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
+app.use(compression()); // Enable gzip compression
 app.use(express.json());
 app.use(express.static(__dirname));
+
+// Cache control helper
+function generateETag(data) {
+  return `"${crypto.createHash('md5').update(JSON.stringify(data)).digest('hex')}"`;
+}
+
+function setCacheHeaders(res, ttlSeconds = 600) {
+  res.setHeader('Cache-Control', `public, max-age=${ttlSeconds}`);
+  res.setHeader('Vary', 'Accept-Encoding');
+}
 
 // Logger pour déboguer
 const logRequest = (method, path, status, time) => {
@@ -58,6 +71,9 @@ app.get('/proxy', async (req, res) => {
       console.error(`⚠️ Response not OK: ${response.status} ${response.statusText}`);
     }
 
+    // Set cache headers for proxied requests (5 minute default)
+    setCacheHeaders(res, 300);
+
     res.setHeader('Content-Type', contentType || 'application/octet-stream');
 
     if (contentType.includes('xml') || url.includes('.xml')) {
@@ -95,6 +111,11 @@ app.get('/api/hydro-quebec/demande', async (req, res) => {
     const data = await response.json();
     const time = Date.now() - startTime;
 
+    // Set cache headers (10 minutes for demand data)
+    setCacheHeaders(res, 600);
+    const etag = generateETag(data);
+    res.setHeader('ETag', etag);
+
     logRequest('GET', '/api/hydro-quebec/demande', response.status, time);
     res.json(data);
 
@@ -118,6 +139,11 @@ app.get('/api/hydro-quebec/production', async (req, res) => {
     });
     const data = await response.json();
     const time = Date.now() - startTime;
+
+    // Set cache headers (10 minutes for production data)
+    setCacheHeaders(res, 600);
+    const etag = generateETag(data);
+    res.setHeader('ETag', etag);
 
     logRequest('GET', '/api/hydro-quebec/production', response.status, time);
     res.json(data);
@@ -143,6 +169,11 @@ app.get('/api/hydro-quebec/exchange', async (req, res) => {
     const data = await response.json();
     const time = Date.now() - startTime;
 
+    // Set cache headers (10 minutes for exchange data)
+    setCacheHeaders(res, 600);
+    const etag = generateETag(data);
+    res.setHeader('ETag', etag);
+
     logRequest('GET', '/api/hydro-quebec/exchange', response.status, time);
     res.json(data);
 
@@ -166,6 +197,11 @@ app.get('/api/ieso/realtime', async (req, res) => {
     });
     const data = await response.text();
     const time = Date.now() - startTime;
+
+    // Set cache headers (5 minutes for IESO real-time data)
+    setCacheHeaders(res, 300);
+    const etag = generateETag(data);
+    res.setHeader('ETag', etag);
 
     logRequest('GET', '/api/ieso/realtime', response.status, time);
     res.setHeader('Content-Type', 'application/xml');
