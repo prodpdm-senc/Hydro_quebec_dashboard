@@ -1176,33 +1176,36 @@ function renderExchangeCharts() {
     if (!disp.length) return;
 
     const labels = disp.map(r => xLabel(r.date));
-    const values = disp.map(r => r.exportations_total||0);
-    const colors = values.map(v => v>=0 ? '#2e8b6a' : '#c47a2e');
     const { text, grid } = chartColors();
+
+    // Stacked area: Ontario, New York, New England, New Brunswick
+    const datasets = [
+        { label:'Ontario', data: disp.map(r => r.exportations_ontario||0), borderColor:'#2e8b6a', backgroundColor:'rgba(46,139,106,0.6)' },
+        { label:'New York', data: disp.map(r => r.exportations_newyork||0), borderColor:'#4a7fa5', backgroundColor:'rgba(74,127,165,0.6)' },
+        { label:'New England', data: disp.map(r => r.exportations_newengland||0), borderColor:'#d9a347', backgroundColor:'rgba(217,163,71,0.6)' },
+        { label:'New Brunswick', data: disp.map(r => r.exportations_newbrunswick||0), borderColor:'#888888', backgroundColor:'rgba(136,136,136,0.6)' }
+    ];
 
     destroyChart('exchangeChart');
     charts['exchangeChart'] = new Chart(
         document.getElementById('exchangeChart').getContext('2d'),
         {
-            type:'line',
-            data:{ labels, datasets:[{
-                label:'Flux net', data:values,
-                segment:{ borderColor: ctx => colors[ctx.p0DataIndex] },
-                backgroundColor:'rgba(74,127,165,0.07)',
-                borderWidth:2.5, tension:0.25, fill:true, pointRadius:0, pointHoverRadius:6
-            }]},
+            type:'bar',
+            data:{ labels, datasets },
             options:{
                 responsive:true, maintainAspectRatio:false,
                 plugins:{
-                    legend:{ display:false },
+                    legend:{ position:'top', labels:{ color:text, font:{size:11}, padding:15 } },
                     tooltip:{ callbacks:{
-                        label: c => { const v=Math.round(c.parsed.y); return (v>=0?'Exportation':'Importation')+' : '+Math.abs(v).toLocaleString('fr-CA')+' MW'; }
+                        label: c => {
+                            const v = Math.round(c.parsed.y);
+                            return c.dataset.label + ' : ' + (v>=0 ? '+' : '') + v.toLocaleString('fr-CA') + ' MW';
+                        }
                     }}
                 },
                 scales:{
-                    x:{ grid:{display:false}, ticks:{ color:text, maxRotation:0, maxTicksLimit:8, autoSkip:true, font:{size:11} } },
-                    y:{ grid:{color:grid}, ticks:{ color:text, callback:v=>(v>=0?'+':'')+v.toLocaleString('fr-CA')+' MW', font:{size:11} },
-                        title:{ display:true, text:'↑ Exportation  ·  ↓ Importation', color:text, font:{size:12} } }
+                    x:{ stacked:true, grid:{display:false}, ticks:{ color:text, maxRotation:0, maxTicksLimit:8, autoSkip:true, font:{size:11} } },
+                    y:{ stacked:true, grid:{color:grid}, ticks:{ color:text, callback:v=>(v>=0?'+':'')+v.toLocaleString('fr-CA')+' MW', font:{size:11} } }
                 },
                 layout:{ padding:{ bottom:10 } }
             }
