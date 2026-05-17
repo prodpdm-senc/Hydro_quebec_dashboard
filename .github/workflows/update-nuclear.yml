@@ -117,16 +117,20 @@ jobs:
           else:
               history = {'updated': '', 'data': []}
 
-          # Build current snapshot (last known MW per plant)
-          snapshot = {'ts': nuclear['updated'], 'total': 0}
+          # Build current snapshot (last known MW per plant + individual units)
+          snapshot = {'ts': nuclear['updated'], 'total': 0, 'plants': {}}
           for plant, unit_names in PLANT_GROUPS.items():
-              mw = 0
+              plant_total = 0
+              plant_units = {}
               for u in unit_names:
                   arr = nuclear['units'].get(u)
                   if arr:
-                      mw += arr[-1] or 0
-              snapshot[plant] = mw
-              snapshot['total'] += mw
+                      val = arr[-1] or 0
+                      plant_units[u] = val
+                      plant_total += val
+              snapshot['plants'][plant] = {'total': plant_total, 'units': plant_units}
+              snapshot[plant] = plant_total  # Keep for backward compat
+              snapshot['total'] += plant_total
 
           # Add Ontario total output if available
           if ontario_total is not None:

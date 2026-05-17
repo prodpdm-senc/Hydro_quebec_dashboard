@@ -653,8 +653,25 @@
                 </div></div>
                 <!-- Plant cards grid -->
                 <div class="nuclear-grid" id="nuclearGrid"></div>
-                <p style="color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center; margin-top:-8px; margin-bottom:18px;">
-                    Réacteurs CANDU · Données IESO Ontario · NRC Canada · Mis à jour toutes les 5 min
+
+                <!-- Plant combo charts (reactors + total) -->
+                <div class="row g-3 mt-2">
+                    <div class="col-12"><div class="card"><div class="chart-container" style="height:300px">
+                        <h6 class="mb-2">Bruce NGS — Production par réacteur (7 jours)</h6>
+                        <canvas id="nuclearChart-bruce"></canvas>
+                    </div></div></div>
+                    <div class="col-12"><div class="card"><div class="chart-container" style="height:300px">
+                        <h6 class="mb-2">Darlington NGS — Production par réacteur (7 jours)</h6>
+                        <canvas id="nuclearChart-darlington"></canvas>
+                    </div></div></div>
+                    <div class="col-12"><div class="card"><div class="chart-container" style="height:300px">
+                        <h6 class="mb-2">Pickering NGS — Production par réacteur (7 jours)</h6>
+                        <canvas id="nuclearChart-pickering"></canvas>
+                    </div></div></div>
+                </div>
+
+                <p style="color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center; margin-top:18px; margin-bottom:18px;">
+                    Réacteurs CANDU · Données IESO Ontario · NRC Canada · Mis à jour toutes les 5 min · Historique 7 jours (30 min)
                 </p>
                 <div class="tab-actions">
                     <button class="btn btn-light" onclick="loadNuclearTab()">🔄 Actualiser</button>
@@ -2207,7 +2224,95 @@ async function loadNuclearTab() {
         }
     );
 
+    // ── Load and render plant combo charts ──
+    await renderNuclearPlantCharts();
+
     log(`✅ Nucléaire: ${NUCLEAR_PLANTS.reduce((s,p)=>s+p.units.length,0)} unités · Ontario ${Math.round(onLive).toLocaleString('fr-CA')} MW`);
+}
+
+// Render combo charts for each nuclear plant (individual reactors + plant total)
+async function renderNuclearPlantCharts() {
+    try {
+        const hist = await corsGet(isLocalhost ? 'http://localhost:3001/proxy?url=https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/history.json' : 'https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/history.json');
+        const histData = await hist.json();
+        const { text: ct, grid: cg } = chartColors();
+        const PLANT_GROUPS = {
+            bruce: ['BRUCEA-G1','BRUCEA-G2','BRUCEA-G3','BRUCEA-G4','BRUCEB-G5','BRUCEB-G6','BRUCEB-G7','BRUCEB-G8'],
+            darlington: ['DARLINGTON-G1','DARLINGTON-G2','DARLINGTON-G3','DARLINGTON-G4'],
+            pickering: ['PICKERINGB-G5','PICKERINGB-G6','PICKERINGB-G7','PICKERINGB-G8']
+        };
+
+        for (const [plantId, unitNames] of Object.entries(PLANT_GROUPS)) {
+            const chartEl = document.getElementById(`nuclearChart-${plantId}`);
+            if (!chartEl) continue;
+
+            // Extract time-series data for each unit
+            const labels = [];
+            const unitDataMap = {};
+            unitNames.forEach(u => unitDataMap[u] = []);
+
+            histData.data.forEach(snapshot => {
+                labels.push(xLabel(snapshot.ts));
+                const plantData = snapshot.plants?.[plantId];
+                if (plantData?.units) {
+                    unitNames.forEach(u => {
+                        unitDataMap[u].push(plantData.units[u] || 0);
+                    });
+                }
+            });
+
+            // Colors for each reactor
+            const colors = ['#3b5998', '#4a90e2', '#7cb342', '#fbc02d', '#e65100', '#c2185b', '#6a1b9a', '#00796b'];
+            const datasets = unitNames.map((unit, i) => ({
+                label: unit.replace(/[A-Z]-/,''),
+                data: unitDataMap[unit],
+                borderColor: colors[i % colors.length],
+                backgroundColor: 'transparent',
+                borderWidth: 1.5,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 4
+            }));
+
+            // Add plant total as bold dashed line
+            const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || 0);
+            datasets.push({
+                label: 'Total ' + plantId.charAt(0).toUpperCase() + plantId.slice(1),
+                data: plantTotals,
+                borderColor: '#000',
+                backgroundColor: 'transparent',
+                borderWidth: 3,
+                borderDash: [5, 5],
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 5
+            });
+
+            destroyChart(`nuclearChart-${plantId}`);
+            charts[`nuclearChart-${plantId}`] = new Chart(
+                chartEl.getContext('2d'),
+                {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'top', labels: { color: ct, font: { size: 10 }, padding: 10 } },
+                            tooltip: { callbacks: { label: c => c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString('fr-CA') + ' MW' } }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: ct, maxRotation: 0, maxTicksLimit: 8, font: { size: 10 } } },
+                            y: { grid: { color: cg }, ticks: { color: ct, callback: v => v.toLocaleString('fr-CA') + ' MW', font: { size: 10 } } }
+                        },
+                        layout: { padding: { bottom: 8 } }
+                    }
+                }
+            );
+        }
+    } catch (err) {
+        log(`⚠ Graphiques centrales : ${err.message}`);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
