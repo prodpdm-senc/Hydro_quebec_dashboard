@@ -2214,32 +2214,17 @@ async function showPlantChart(plantId) {
             console.warn('Could not fetch nuclear.json for fallback:', e);
         }
 
-        // Keep only last 3 days (144 snapshots at 30-min intervals) to show real unit-level data
-        const MAX_POINTS = 144; // 3 days × 48 snapshots/day
-        const recentData = histData.data.slice(-MAX_POINTS);
+        // Filter to only snapshots with real unit-level data (no estimates)
+        const realData = histData.data.filter(s => s.plants?.[plantId]?.units);
 
-        let dataPointsAdded = 0;
-        recentData.forEach((snapshot, idx) => {
+        realData.forEach((snapshot) => {
             labels.push(xLabel(snapshot.ts));
-            const plantData = snapshot.plants?.[plantId];
-            if (plantData?.units) {
-                // New format: individual unit data available
-                unitNames.forEach(u => {
-                    unitDataMap[u].push(plantData.units[u] || 0);
-                });
-            } else {
-                // Fallback: old-format snapshot without unit breakdown
-                // Just distribute plant total evenly (can't reliably estimate historical unit splits)
-                const plantTotal = snapshot[plantId] || 0;
-                const perUnit = Math.round(plantTotal / unitNames.length);
-                unitNames.forEach(u => {
-                    unitDataMap[u].push(perUnit);
-                });
-                if (idx === 0) console.log(`[${plantId}] Old format: plantTotal=${plantTotal}, perUnit=${perUnit}, ${unitNames.length} units`);
-                dataPointsAdded++;
-            }
+            const plantData = snapshot.plants[plantId];
+            unitNames.forEach(u => {
+                unitDataMap[u].push(plantData.units[u] || 0);
+            });
         });
-        console.log(`[${plantId}] Total data points: ${labels.length}, using fallback for: ${dataPointsAdded}`);
+        console.log(`[${plantId}] Real data points: ${labels.length} (${realData.length} snapshots with unit-level data)`);
 
         // Colors
         const colors = ['#4a5fa3', '#2a6fa8', '#2e8b6a', '#c47a2e', '#8a3a5a', '#3a7d8e', '#b84848', '#4a5fa3'];
@@ -2254,8 +2239,8 @@ async function showPlantChart(plantId) {
             pointHoverRadius: 4
         }));
 
-        // Plant total as bold dashed line (use new or old format)
-        const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || s[plantId] || 0);
+        // Plant total as bold dashed line (real data only)
+        const plantTotals = realData.map(s => s.plants[plantId].total);
         datasets.push({
             label: 'Total centrale',
             data: plantTotals,
@@ -2269,7 +2254,7 @@ async function showPlantChart(plantId) {
         });
 
         wrap.innerHTML = `<div class="plant-chart-container"><canvas id="plantHourlyChart"></canvas></div>`;
-        document.getElementById('plantModalSource').textContent = `Historique 3 jours · résolution 30 min`;
+        document.getElementById('plantModalSource').textContent = `Données réelles IESO · résolution 30 min`;
 
         destroyChart('plantHourlyChart');
         charts['plantHourlyChart'] = new Chart(
