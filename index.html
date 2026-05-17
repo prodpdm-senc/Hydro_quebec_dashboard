@@ -2203,33 +2203,39 @@ async function showPlantChart(plantId) {
         // Check if we have the new plants structure; if not, fetch nuclear.json for fallback
         let hasPlantData = histData.data.some(s => s.plants?.[plantId]?.units);
         let nuclearData = null;
-        if (!hasPlantData) {
-            try {
-                const nuc = await corsGet(isLocalhost ? 'http://localhost:3001/proxy?url=https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/nuclear.json' : 'https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/nuclear.json');
-                nuclearData = await nuc.json();
-            } catch (e) {
-                console.warn('Could not fetch nuclear.json for fallback:', e);
-            }
+        console.log(`[${plantId}] hasPlantData: ${hasPlantData}`);
+
+        // Always fetch nuclear.json as a fallback (some snapshots might be missing the new structure)
+        try {
+            const nuc = await corsGet(isLocalhost ? 'http://localhost:3001/proxy?url=https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/nuclear.json' : 'https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/nuclear.json');
+            nuclearData = await nuc.json();
+            console.log(`[${plantId}] Fetched nuclear.json with ${Object.keys(nuclearData.units).length} units`);
+        } catch (e) {
+            console.warn('Could not fetch nuclear.json for fallback:', e);
         }
 
-        histData.data.forEach(snapshot => {
+        let dataPointsAdded = 0;
+        histData.data.forEach((snapshot, idx) => {
             labels.push(xLabel(snapshot.ts));
             const plantData = snapshot.plants?.[plantId];
             if (plantData?.units) {
+                // New format: individual unit data available
                 unitNames.forEach(u => {
                     unitDataMap[u].push(plantData.units[u] || 0);
                 });
-            } else if (nuclearData?.units) {
-                // Fallback: estimate unit breakdown based on current ratio when plants structure missing
+            } else {
+                // Fallback: old-format snapshot without unit breakdown
+                // Just distribute plant total evenly (can't reliably estimate historical unit splits)
                 const plantTotal = snapshot[plantId] || 0;
-                const nuclearTotal = Object.values(nuclearData.units).reduce((s, arr) => s + (arr[arr.length - 1] || 0), 0);
-                const ratio = nuclearTotal > 0 ? plantTotal / nuclearTotal : 0;
+                const perUnit = Math.round(plantTotal / unitNames.length);
                 unitNames.forEach(u => {
-                    const nuclearValue = nuclearData.units[u]?.[nuclearData.units[u].length - 1] || 0;
-                    unitDataMap[u].push(Math.round(nuclearValue * ratio));
+                    unitDataMap[u].push(perUnit);
                 });
+                if (idx === 0) console.log(`[${plantId}] Old format: plantTotal=${plantTotal}, perUnit=${perUnit}, ${unitNames.length} units`);
+                dataPointsAdded++;
             }
         });
+        console.log(`[${plantId}] Total data points: ${labels.length}, using fallback for: ${dataPointsAdded}`);
 
         // Colors
         const colors = ['#4a5fa3', '#2a6fa8', '#2e8b6a', '#c47a2e', '#8a3a5a', '#3a7d8e', '#b84848', '#4a5fa3'];
@@ -2244,8 +2250,8 @@ async function showPlantChart(plantId) {
             pointHoverRadius: 4
         }));
 
-        // Plant total as bold dashed line
-        const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || 0);
+        // Plant total as bold dashed line (use new or old format)
+        const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || s[plantId] || 0);
         datasets.push({
             label: 'Total centrale',
             data: plantTotals,
