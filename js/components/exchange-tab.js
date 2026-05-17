@@ -7,13 +7,13 @@ async function loadExchangeTab() {
 
   try {
     const data = await api.getExchange();
-    if (!data || !data.records) throw new Error('No exchange data');
 
-    const records = data.records || [];
-    if (records.length === 0) throw new Error('No exchange records available');
+    // Handle both array and object with records property
+    const records = Array.isArray(data) ? data : (data.records || []);
+    if (!records || records.length === 0) throw new Error('No exchange data');
 
     const latest = records[records.length - 1];
-    const fields = latest.fields || {};
+    const fields = latest.fields || latest; // Latest can be object directly or have fields property
     const timestamp = fields.date || new Date().toISOString();
 
     store.setState('exchange', data);
@@ -93,39 +93,33 @@ async function loadExchangeTab() {
 function parseExchangePartners(fields) {
   const partners = {};
 
-  // Map field names to partners
-  const partnerMap = {
-    'importation_ontario': 'Ontario',
-    'importation_manitoba': 'Manitoba',
-    'importation_us_new_york': 'New York (USA)',
-    'importation_us_vermont': 'Vermont (USA)',
-    'importation_us_massachusetts': 'Massachusetts (USA)',
-    'importation_us_other': 'USA (Autres)',
-    'exportation_ontario': 'Ontario',
-    'exportation_manitoba': 'Manitoba',
-    'exportation_us_new_york': 'New York (USA)',
-    'exportation_us_vermont': 'Vermont (USA)',
-    'exportation_us_massachusetts': 'Massachusetts (USA)',
-    'exportation_us_other': 'USA (Autres)'
-  };
-
-  // Extract data from fields
+  // Parse API field names: exportations_ontario, importations_sources_newyork_total, etc.
   Object.entries(fields).forEach(([fieldName, value]) => {
-    const lowerName = fieldName.toLowerCase();
     const numValue = parseFloat(value) || 0;
+    if (numValue === 0 && value !== 0) return; // Skip null/undefined values
 
-    Object.entries(partnerMap).forEach(([pattern, partnerName]) => {
-      if (lowerName.includes(pattern)) {
-        if (!partners[partnerName]) {
-          partners[partnerName] = { imports: 0, exports: 0 };
-        }
-        if (pattern.includes('importation')) {
-          partners[partnerName].imports += numValue;
-        } else {
-          partners[partnerName].exports += numValue;
-        }
+    // Extract partner from field names like "exportations_ontario" or "importations_sources_newyork_total"
+    let partner = null;
+
+    if (fieldName.includes('exportations_ontario')) partner = 'Ontario';
+    else if (fieldName.includes('importations_sources_ontario')) partner = 'Ontario';
+    else if (fieldName.includes('exportations_newbrunswick')) partner = 'New Brunswick';
+    else if (fieldName.includes('importations_sources_newbrunswick')) partner = 'New Brunswick';
+    else if (fieldName.includes('exportations_newyork')) partner = 'New York (USA)';
+    else if (fieldName.includes('importations_sources_newyork')) partner = 'New York (USA)';
+    else if (fieldName.includes('exportations_newengland')) partner = 'New England (USA)';
+    else if (fieldName.includes('importations_sources_newengland')) partner = 'New England (USA)';
+
+    if (partner) {
+      if (!partners[partner]) {
+        partners[partner] = { imports: 0, exports: 0 };
       }
-    });
+      if (fieldName.includes('exportations')) {
+        partners[partner].exports += numValue;
+      } else if (fieldName.includes('importations')) {
+        partners[partner].imports += numValue;
+      }
+    }
   });
 
   return partners;

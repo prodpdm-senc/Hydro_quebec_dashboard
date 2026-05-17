@@ -73,6 +73,10 @@ class APIClient {
     return this.fetch('/api/ieso/realtime');
   }
 
+  async getOntarioData() {
+    return this.getIESOData();
+  }
+
   clearCache() {
     this.cache.clear();
     this.ttl.clear();

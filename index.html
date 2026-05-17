@@ -35,15 +35,21 @@
         <!-- Main Navigation -->
         <ul class="nav nav-pills mb-3" id="mainTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="tab-demande-btn" data-bs-toggle="tab"
+                <button class="nav-link active" id="tab-canada-btn" data-bs-toggle="tab"
+                    data-bs-target="#tab-canada" type="button" role="tab">
+                    🇨🇦 Canada
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-demande-btn" data-bs-toggle="tab"
                     data-bs-target="#tab-demande" type="button" role="tab">
-                    📊 Demande
+                    💧 Hydro-Québec
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="tab-production-btn" data-bs-toggle="tab"
                     data-bs-target="#tab-production" type="button" role="tab">
-                    ⚡ Production
+                    🔋 Production
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -55,7 +61,7 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="tab-ontario-btn" data-bs-toggle="tab"
                     data-bs-target="#tab-ontario" type="button" role="tab">
-                    🇨🇦 Ontario
+                    ⚡ Ontario
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -64,15 +70,23 @@
                     🔄 Échanges
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-analysis-btn" data-bs-toggle="tab"
+                    data-bs-target="#tab-analysis" type="button" role="tab">
+                    📊 Analyse
+                </button>
+            </li>
         </ul>
 
         <!-- Tab Content -->
         <div class="tab-content">
-            <div class="tab-pane fade show active" id="tab-demande" role="tabpanel"></div>
+            <div class="tab-pane fade show active" id="tab-canada" role="tabpanel"></div>
+            <div class="tab-pane fade" id="tab-demande" role="tabpanel"></div>
             <div class="tab-pane fade" id="tab-production" role="tabpanel"></div>
             <div class="tab-pane fade" id="tab-nuclear" role="tabpanel"></div>
             <div class="tab-pane fade" id="tab-ontario" role="tabpanel"></div>
             <div class="tab-pane fade" id="tab-exchange" role="tabpanel"></div>
+            <div class="tab-pane fade" id="tab-analysis" role="tabpanel"></div>
         </div>
 
         <!-- Footer -->
@@ -91,11 +105,13 @@
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
     <script src="js/chart-manager.js"></script>
+    <script src="js/components/canada-tab.js"></script>
     <script src="js/components/demand-tab.js"></script>
     <script src="js/components/production-tab.js"></script>
     <script src="js/components/nuclear-tab.js"></script>
     <script src="js/components/ontario-tab.js"></script>
     <script src="js/components/exchange-tab.js"></script>
+    <script src="js/components/analysis-tab.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>
