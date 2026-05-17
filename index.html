@@ -626,11 +626,6 @@
                 <!-- KPI row -->
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Capacité Canada</div>
-                        <div class="stat-value" style="color:#4a5fa3" id="nuc-total-cap">12,861 MW</div>
-                        <div class="stat-time">4 centrales · 16 unités</div>
-                    </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Production Ontario</div>
                         <div class="stat-value" style="color:#4a5fa3" id="nuc-on-live">--</div>
                         <div class="stat-time" id="nuc-on-live-label">IESO · temps réel</div>
@@ -640,22 +635,12 @@
                         <div class="stat-value text-success" id="nuc-cf">--</div>
                         <div class="stat-time">Ontario (IESO)</div>
                     </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Point Lepreau (NB)</div>
-                        <div class="stat-value" style="color:#4a5fa3">705 MW</div>
-                        <div class="stat-time">NB Power · 1 unité CANDU</div>
-                    </div></div>
                 </div>
-                <!-- Plant output chart -->
-                <div class="card mb-3"><div class="chart-container" style="height:240px">
-                    <h6 class="mb-2">Production par centrale (MW) — nominal vs temps réel</h6>
-                    <canvas id="nuclearChart"></canvas>
-                </div></div>
                 <!-- Plant cards grid -->
                 <div class="nuclear-grid" id="nuclearGrid"></div>
 
                 <p style="color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center; margin-top:12px; margin-bottom:18px;">
-                    Réacteurs CANDU · Données IESO Ontario · NRC Canada · Mis à jour toutes les 5 min · Historique 7 jours (30 min)
+                    4 centrales Ontario · 16 unités CANDU · Point Lepreau (NB) 705 MW · Données IESO · Mis à jour toutes les 5 min · Historique 7 jours (30 min)
                 </p>
                 <div class="tab-actions">
                     <button class="btn btn-light" onclick="loadNuclearTab()">🔄 Actualiser</button>
@@ -2162,144 +2147,10 @@ async function loadNuclearTab() {
                 <div class="nuclear-total-bar-fill" style="width:${Math.min(100,cfPlant)}%;background:${plant.color}"></div>
             </div>
             <div class="nuclear-units">${unitRows}</div>
-            <div style="height:180px; margin-top:12px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
-                <canvas id="nuclearChart-${plant.id}" style="max-height:160px;"></canvas>
-            </div>
         </div>`;
     }).join('');
 
-    // ── Graphique de synthèse ──
-    const { text: ct, grid: cg } = chartColors();
-    destroyChart('nuclearChart');
-    charts['nuclearChart'] = new Chart(
-        document.getElementById('nuclearChart').getContext('2d'),
-        {
-            type: 'bar',
-            data: {
-                labels: plantChartData.map(p => p.name),
-                datasets: [
-                    {
-                        label: 'Nominal (MW)',
-                        data: plantChartData.map(p => p.nameplate),
-                        backgroundColor: plantChartData.map(p => p.color + '28'),
-                        borderColor:     plantChartData.map(p => p.color + '80'),
-                        borderWidth: 1, borderRadius: 4
-                    },
-                    {
-                        label: 'Production (MW)',
-                        data: plantChartData.map(p => p.live),
-                        backgroundColor: plantChartData.map(p => p.color + 'cc'),
-                        borderColor:     plantChartData.map(p => p.color),
-                        borderWidth: 1, borderRadius: 4
-                    }
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { position:'top', labels:{ color:ct, font:{size:11}, boxWidth:14 } },
-                    tooltip: { callbacks: {
-                        label: c => ` ${c.dataset.label} : ${Math.round(c.parsed.y).toLocaleString('fr-CA')} MW`
-                    }}
-                },
-                scales: {
-                    x: { grid:{display:false}, ticks:{color:ct, font:{size:11, weight:'600'}} },
-                    y: { grid:{color:cg}, ticks:{color:ct, callback:v=>v.toLocaleString('fr-CA')+' MW', font:{size:10}} }
-                },
-                layout: { padding:{bottom:8} }
-            }
-        }
-    );
-
-    // ── Load and render plant combo charts ──
-    await renderNuclearPlantCharts();
-
     log(`✅ Nucléaire: ${NUCLEAR_PLANTS.reduce((s,p)=>s+p.units.length,0)} unités · Ontario ${Math.round(onLive).toLocaleString('fr-CA')} MW`);
-}
-
-// Render combo charts for each nuclear plant (individual reactors + plant total)
-async function renderNuclearPlantCharts() {
-    try {
-        const hist = await corsGet(isLocalhost ? 'http://localhost:3001/proxy?url=https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/history.json' : 'https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/history.json');
-        const histData = await hist.json();
-        const { text: ct, grid: cg } = chartColors();
-        const PLANT_GROUPS = {
-            bruce: ['BRUCEA-G1','BRUCEA-G2','BRUCEA-G3','BRUCEA-G4','BRUCEB-G5','BRUCEB-G6','BRUCEB-G7','BRUCEB-G8'],
-            darlington: ['DARLINGTON-G1','DARLINGTON-G2','DARLINGTON-G3','DARLINGTON-G4'],
-            pickering: ['PICKERINGB-G5','PICKERINGB-G6','PICKERINGB-G7','PICKERINGB-G8']
-        };
-
-        for (const [plantId, unitNames] of Object.entries(PLANT_GROUPS)) {
-            const chartEl = document.getElementById(`nuclearChart-${plantId}`);
-            if (!chartEl) continue;
-
-            // Extract time-series data for each unit
-            const labels = [];
-            const unitDataMap = {};
-            unitNames.forEach(u => unitDataMap[u] = []);
-
-            histData.data.forEach(snapshot => {
-                labels.push(xLabel(snapshot.ts));
-                const plantData = snapshot.plants?.[plantId];
-                if (plantData?.units) {
-                    unitNames.forEach(u => {
-                        unitDataMap[u].push(plantData.units[u] || 0);
-                    });
-                }
-            });
-
-            // Colors for each reactor
-            const colors = ['#3b5998', '#4a90e2', '#7cb342', '#fbc02d', '#e65100', '#c2185b', '#6a1b9a', '#00796b'];
-            const datasets = unitNames.map((unit, i) => ({
-                label: unit.replace(/[A-Z]-/,''),
-                data: unitDataMap[unit],
-                borderColor: colors[i % colors.length],
-                backgroundColor: 'transparent',
-                borderWidth: 1.5,
-                tension: 0.3,
-                pointRadius: 0,
-                pointHoverRadius: 4
-            }));
-
-            // Add plant total as bold dashed line
-            const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || 0);
-            datasets.push({
-                label: 'Total ' + plantId.charAt(0).toUpperCase() + plantId.slice(1),
-                data: plantTotals,
-                borderColor: '#000',
-                backgroundColor: 'transparent',
-                borderWidth: 3,
-                borderDash: [5, 5],
-                tension: 0.3,
-                pointRadius: 0,
-                pointHoverRadius: 5
-            });
-
-            destroyChart(`nuclearChart-${plantId}`);
-            charts[`nuclearChart-${plantId}`] = new Chart(
-                chartEl.getContext('2d'),
-                {
-                    type: 'line',
-                    data: { labels, datasets },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'top', labels: { color: ct, font: { size: 10 }, padding: 10 } },
-                            tooltip: { callbacks: { label: c => c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString('fr-CA') + ' MW' } }
-                        },
-                        scales: {
-                            x: { grid: { display: false }, ticks: { color: ct, maxRotation: 0, maxTicksLimit: 8, font: { size: 10 } } },
-                            y: { grid: { color: cg }, ticks: { color: ct, callback: v => v.toLocaleString('fr-CA') + ' MW', font: { size: 10 } } }
-                        },
-                        layout: { padding: { bottom: 8 } }
-                    }
-                }
-            );
-        }
-    } catch (err) {
-        log(`⚠ Graphiques centrales : ${err.message}`);
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
