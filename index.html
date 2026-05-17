@@ -2410,8 +2410,12 @@ setInterval(() => {
     loadHistoricalDataToStore();
     log('🚀 Initialisation dashboard ');
     try {
-        // Load critical demand data first
-        await loadDemandTabWithHistory();
+        // Load critical data on startup (in parallel)
+        await Promise.all([
+            loadDemandTabWithHistory(),
+            loadProductionTabWithHistory(),
+            loadExchangeTabWithHistory()
+        ]);
         await loadCanadaTab();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
