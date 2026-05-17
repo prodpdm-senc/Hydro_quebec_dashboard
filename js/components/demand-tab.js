@@ -7,11 +7,12 @@ async function loadDemandTab() {
 
   try {
     const data = await api.getDemande();
-    if (!data || !data.data) throw new Error('No demand data');
+    if (!data || !data.details) throw new Error('No demand data');
 
-    const latest = data.data[data.data.length - 1] || {};
-    const demande = latest.demande || 0;
-    const timestamp = latest.heure || new Date().toISOString();
+    const details = data.details || [];
+    const latest = details[details.length - 1] || {};
+    const demande = latest.valeurs?.demandeTotal || 0;
+    const timestamp = latest.date || new Date().toISOString();
 
     store.setState('demande', data);
     store.clearError('demande');
@@ -49,13 +50,14 @@ function renderDemandChart(data) {
   const canvas = query('#demandChart');
   if (!canvas) return;
 
-  const last7Days = data.data.slice(-168); // 7 days * 24 hours
+  const details = data.details || [];
+  const last7Days = details.slice(-336); // 7 days * 48 intervals (15-min resolution)
   const labels = last7Days.map(d => {
-    const date = new Date(d.heure);
+    const date = new Date(d.date);
     return date.toLocaleDateString('fr-CA', { month: 'short', day: 'numeric' });
   });
 
-  const demandValues = last7Days.map(d => d.demande || 0);
+  const demandValues = last7Days.map(d => d.valeurs?.demandeTotal || 0);
 
   window.chartManager.createOrUpdate(canvas, 'line', {
     labels,
