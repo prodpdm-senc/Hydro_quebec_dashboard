@@ -321,3 +321,177 @@ h5, h6 { color: var(--text-primary); }
     background: linear-gradient(90deg, #4a5fa3, #5a7ab8);
     transition: width 0.9s ease;
 }
+
+/* ── Production Grid ── */
+.production-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.production-card {
+    padding: 16px;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.production-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+
+.production-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.production-value {
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: var(--text-primary);
+    margin: 6px 0;
+}
+
+.production-percent {
+    font-size: 0.9rem;
+    color: #4a7fa5;
+    font-weight: 600;
+}
+
+/* ── Exchange Partners ── */
+.exchange-partners {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.exchange-partner-card {
+    padding: 16px;
+    transition: all 0.2s;
+}
+
+.exchange-partner-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+
+.exchange-partner-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+
+.exchange-partner-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    margin: 6px 0;
+    color: var(--text-secondary);
+}
+
+.exchange-partner-row span:last-child {
+    font-weight: 600;
+}
+
+/* ── Nuclear Plants Grid ── */
+.nuclear-plants-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.nuclear-plant-card {
+    padding: 16px;
+    transition: all 0.2s;
+}
+
+.nuclear-plant-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+
+.plant-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.plant-capacity {
+    font-size: 0.95rem;
+    color: #4a7fa5;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.plant-utilization {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.plant-units {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* ── Nuclear Modal ── */
+.nuclear-modal-overlay {
+    animation: fadeIn 0.2s ease;
+}
+
+.nuclear-modal {
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.nuclear-modal h3 {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.nuclear-modal h5 {
+    font-size: 0.95rem;
+    margin: 0 0 8px;
+}
+
+.plant-details p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.plant-details strong {
+    color: var(--text-primary);
+}
+
+.units-list {
+    gap: 8px;
+}
+
+.unit-item {
+    font-weight: 600;
+    color: var(--text-primary);
+}

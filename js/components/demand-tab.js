@@ -10,7 +10,17 @@ async function loadDemandTab() {
     if (!data || !data.details) throw new Error('No demand data');
 
     const details = data.details || [];
-    const latest = details[details.length - 1] || {};
+    // Find latest record with actual data (some recent records may be empty)
+    let latest = {};
+    for (let i = details.length - 1; i >= 0; i--) {
+      if (details[i].valeurs && Object.keys(details[i].valeurs).length > 0) {
+        latest = details[i];
+        break;
+      }
+    }
+    if (Object.keys(latest).length === 0) {
+      latest = details[details.length - 1] || {};
+    }
     const demande = latest.valeurs?.demandeTotal || 0;
     const timestamp = latest.date || new Date().toISOString();
 
