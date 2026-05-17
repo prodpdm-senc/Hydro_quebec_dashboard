@@ -2305,12 +2305,11 @@ async function renderNuclearPlantCharts() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  GRAPHIQUE HORAIRE PAR CENTRALE (modale)
 // ─────────────────────────────────────────────────────────────────────────────
-function showPlantChart(plantId) {
+async function showPlantChart(plantId) {
     const data = nuclearPlantData[plantId];
     if (!data) return;
 
-    const { plant, resolved, isLepreau } = data;
-    const hours  = nuclearIesoHours;
+    const { plant, isLepreau } = data;
     const modal  = new bootstrap.Modal(document.getElementById('plantModal'));
     const { text: ct, grid: cg } = chartColors();
 
@@ -2319,7 +2318,119 @@ function showPlantChart(plantId) {
     document.getElementById('plantModalMeta').textContent =
         `${plant.operator} · ${plant.location} · ${plant.reactorType}`;
 
-    // Source label
+    const wrap = document.getElementById('plantChartWrap');
+
+    // Point Lepreau: pas de données détaillées
+    if (isLepreau) {
+        wrap.innerHTML = `
+          <div class="no-hourly-msg">
+            <div style="font-size:2rem;margin-bottom:10px">📊</div>
+            <strong>Point Lepreau — NB Power</strong><br>
+            Production estimée : <strong>${Math.round(705 * 0.88).toLocaleString('fr-CA')} MW</strong> (~88 % CF · CANDU 6 · 705 MW nominal)
+          </div>`;
+        document.getElementById('plantModalSource').textContent = `Estimation ~88% CF · NB Power hors couverture IESO`;
+        modal.show();
+        return;
+    }
+
+    // Charger les données d'historique
+    try {
+        const hist = await corsGet(isLocalhost ? 'http://localhost:3001/proxy?url=https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/history.json' : 'https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/history.json');
+        const histData = await hist.json();
+
+        const PLANT_GROUPS = {
+            bruce: ['BRUCEA-G1','BRUCEA-G2','BRUCEA-G3','BRUCEA-G4','BRUCEB-G5','BRUCEB-G6','BRUCEB-G7','BRUCEB-G8'],
+            darlington: ['DARLINGTON-G1','DARLINGTON-G2','DARLINGTON-G3','DARLINGTON-G4'],
+            pickering: ['PICKERINGB-G5','PICKERINGB-G6','PICKERINGB-G7','PICKERINGB-G8']
+        };
+
+        const unitNames = PLANT_GROUPS[plantId] || [];
+        const labels = [];
+        const unitDataMap = {};
+        unitNames.forEach(u => unitDataMap[u] = []);
+
+        histData.data.forEach(snapshot => {
+            labels.push(xLabel(snapshot.ts));
+            const plantData = snapshot.plants?.[plantId];
+            if (plantData?.units) {
+                unitNames.forEach(u => {
+                    unitDataMap[u].push(plantData.units[u] || 0);
+                });
+            }
+        });
+
+        // Colors
+        const colors = ['#4a5fa3', '#2a6fa8', '#2e8b6a', '#c47a2e', '#8a3a5a', '#3a7d8e', '#b84848', '#4a5fa3'];
+        const datasets = unitNames.map((unit, i) => ({
+            label: `Unité ${unit.replace(/[A-Z]-/,'')}`,
+            data: unitDataMap[unit],
+            borderColor: colors[i % colors.length],
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            tension: 0.25,
+            pointRadius: 0,
+            pointHoverRadius: 4
+        }));
+
+        // Plant total as bold dashed line
+        const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || 0);
+        datasets.push({
+            label: 'Total centrale',
+            data: plantTotals,
+            borderColor: '#d4a234',
+            backgroundColor: 'transparent',
+            borderWidth: 3,
+            borderDash: [5, 5],
+            tension: 0.25,
+            pointRadius: 0,
+            pointHoverRadius: 5
+        });
+
+        wrap.innerHTML = `<div class="plant-chart-container"><canvas id="plantHourlyChart"></canvas></div>`;
+        document.getElementById('plantModalSource').textContent = `Historique 7 jours · résolution 30 min`;
+
+        destroyChart('plantHourlyChart');
+        charts['plantHourlyChart'] = new Chart(
+            document.getElementById('plantHourlyChart').getContext('2d'),
+            {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { color: ct, font: { size: 11 }, padding: 12 } },
+                        tooltip: { callbacks: { label: c => c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString('fr-CA') + ' MW' } }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: ct, maxRotation: 0, maxTicksLimit: 10, font: { size: 10 } } },
+                        y: { grid: { color: cg }, ticks: { color: ct, callback: v => v.toLocaleString('fr-CA') + ' MW', font: { size: 10 } } }
+                    },
+                    layout: { padding: { bottom: 8 } }
+                }
+            }
+        );
+    } catch (err) {
+        wrap.innerHTML = `<div class="no-hourly-msg"><strong>Erreur</strong><br>${err.message}</div>`;
+        document.getElementById('plantModalSource').textContent = `Erreur au chargement des données`;
+    }
+
+    modal.show();
+}
+
+// Legacy: keep for compatibility
+function showPlantChartLegacy(plantId) {
+    const data = nuclearPlantData[plantId];
+    if (!data) return;
+
+    const { plant, resolved, isLepreau } = data;
+    const hours  = nuclearIesoHours;
+    const modal  = new bootstrap.Modal(document.getElementById('plantModal'));
+    const { text: ct, grid: cg } = chartColors();
+
+    document.getElementById('plantModalTitle').textContent = `☢ ${plant.name}`;
+    document.getElementById('plantModalMeta').textContent = `${plant.operator} · ${plant.location} · ${plant.reactorType}`;
+
     const hasLive = resolved.some(u => u.source === 'live');
     const hasEst  = !isLepreau && resolved.some(u => u.source === 'estimate');
     let srcLabel = isLepreau
@@ -2329,11 +2440,9 @@ function showPlantChart(plantId) {
         : 'Source indisponible';
     document.getElementById('plantModalSource').textContent = srcLabel;
 
-    // Contenu du graphique
     const wrap = document.getElementById('plantChartWrap');
 
     if (isLepreau || (!hasLive && !hasEst)) {
-        // Point Lepreau ou pas de données horaires
         wrap.innerHTML = `
           <div class="no-hourly-msg">
             <div style="font-size:2rem;margin-bottom:10px">📊</div>
@@ -2346,12 +2455,10 @@ function showPlantChart(plantId) {
         return;
     }
 
-    // Reconstruire le canvas (détruire l'ancien chart si existant)
     wrap.innerHTML = `<div class="plant-chart-container"><canvas id="plantHourlyChart"></canvas></div>`;
 
     const xLabels = hours.map(h => `H${h}`);
 
-    // Une ligne par unité — on filtre les unités avec au moins une valeur
     const COLORS = ['#4a5fa3','#2a6fa8','#2e8b6a','#c47a2e','#8a3a5a','#3a7d8e','#b84848','#4a5fa3'];
     const datasets = resolved
         .filter(u => u.mwHours && u.mwHours.some(v => v != null && v > 0))
