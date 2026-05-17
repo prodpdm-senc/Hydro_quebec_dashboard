@@ -2214,8 +2214,9 @@ async function showPlantChart(plantId) {
             console.warn('Could not fetch nuclear.json for fallback:', e);
         }
 
-        // Show all data: real (unit-level) + fallback (estimated from plant totals)
-        histData.data.forEach((snapshot, idx) => {
+        // Last 24 hours: 48 snapshots at 30-min intervals
+        const last24h = histData.data.slice(-48);
+        last24h.forEach((snapshot, idx) => {
             labels.push(xLabel(snapshot.ts));
             const plantData = snapshot.plants?.[plantId];
             if (plantData?.units) {
@@ -2233,9 +2234,9 @@ async function showPlantChart(plantId) {
             }
         });
 
-        const realCount = histData.data.filter(s => s.plants?.[plantId]?.units).length;
-        const fallbackCount = histData.data.length - realCount;
-        console.log(`[${plantId}] Real: ${realCount} snapshots, Fallback: ${fallbackCount} snapshots`);
+        const realCount = last24h.filter(s => s.plants?.[plantId]?.units).length;
+        const fallbackCount = last24h.length - realCount;
+        console.log(`[${plantId}] 24h window: ${realCount} real, ${fallbackCount} fallback`);
 
         // Colors
         const colors = ['#4a5fa3', '#2a6fa8', '#2e8b6a', '#c47a2e', '#8a3a5a', '#3a7d8e', '#b84848', '#4a5fa3'];
