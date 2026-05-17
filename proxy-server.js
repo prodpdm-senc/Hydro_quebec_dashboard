@@ -41,26 +41,35 @@ app.get('/proxy', async (req, res) => {
     const startTime = Date.now();
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive'
       },
-      timeout: 10000
+      timeout: 10000,
+      redirect: 'follow'
     });
 
-    // Gérer les réponses XML et JSON
-    const contentType = response.headers.get('content-type');
-    let data;
-
-    if (contentType && contentType.includes('xml')) {
-      data = await response.text();
-    } else {
-      data = await response.json();
-    }
-
+    const contentType = response.headers.get('content-type') || '';
     const time = Date.now() - startTime;
     logRequest('GET', url, response.status, time);
 
-    res.setHeader('Content-Type', contentType || 'application/json');
-    res.json(data);
+    if (!response.ok) {
+      console.error(`⚠️ Response not OK: ${response.status} ${response.statusText}`);
+    }
+
+    res.setHeader('Content-Type', contentType || 'application/octet-stream');
+
+    if (contentType.includes('xml') || url.includes('.xml')) {
+      const xmlData = await response.text();
+      res.send(xmlData);
+    } else if (contentType.includes('json')) {
+      const jsonData = await response.json();
+      res.json(jsonData);
+    } else {
+      const data = await response.text();
+      res.send(data);
+    }
 
   } catch (err) {
     console.error(`❌ Erreur proxy: ${err.message}`);

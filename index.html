@@ -1372,29 +1372,29 @@ const PROVINCES = [
       sources:[{n:'Charbon',p:40,c:'#795548'},{n:'Éolien',p:25,c:'#2e8b6a'},{n:'Gaz',p:20,c:'#c47a2e'},{n:'Hydraulique',p:10,c:'#2a6fa8'},{n:'Autres',p:5,c:'#7a8fa6'}] },
 ];
 
-// Try Ontario IESO real-time XML feed
+// Fetch Ontario IESO total output from history.json
+// Note: Direct IESO fetch via browser is blocked by authentication.
+// GitHub workflow fetches and caches ontario_total in history.json every 30 minutes.
 async function fetchOntarioIESO() {
     try {
-        // Use GitHub cache instead of direct IESO API (which requires SAML auth)
         const res = await fetch(`${_ghBase}/data/history.json`, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        // Get the latest entry with Ontario total output
         if (data.data && data.data.length > 0) {
             const latest = data.data[data.data.length - 1];
-
-            // Use ontario_total if available (total output), otherwise fall back to nuclear total
             const total = latest.ontario_total || latest.total;
 
-            const type = latest.ontario_total ? 'total output' : 'nucléaire';
-            log(`✅ Ontario IESO (${type}): ${Math.round(total)} MW`);
-            return total > 0 ? total : null;
+            if (total > 0) {
+                const type = latest.ontario_total ? 'total output' : 'nucléaire (fallback)';
+                log(`✅ Ontario IESO (${type}): ${Math.round(total)} MW`);
+                return total;
+            }
         }
 
-        throw new Error('No data in history.json');
+        throw new Error('No valid data in history.json');
     } catch(e) {
-        log(`⚠️ Ontario IESO indisponible (${e.message})`, true);
+        log(`⚠️ Ontario IESO fetch failed: ${e.message}`, true);
         return null;
     }
 }
