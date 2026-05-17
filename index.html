@@ -654,23 +654,7 @@
                 <!-- Plant cards grid -->
                 <div class="nuclear-grid" id="nuclearGrid"></div>
 
-                <!-- Plant combo charts (reactors + total) -->
-                <div class="row g-3 mt-2">
-                    <div class="col-12"><div class="card"><div class="chart-container" style="height:300px">
-                        <h6 class="mb-2">Bruce NGS — Production par réacteur (7 jours)</h6>
-                        <canvas id="nuclearChart-bruce"></canvas>
-                    </div></div></div>
-                    <div class="col-12"><div class="card"><div class="chart-container" style="height:300px">
-                        <h6 class="mb-2">Darlington NGS — Production par réacteur (7 jours)</h6>
-                        <canvas id="nuclearChart-darlington"></canvas>
-                    </div></div></div>
-                    <div class="col-12"><div class="card"><div class="chart-container" style="height:300px">
-                        <h6 class="mb-2">Pickering NGS — Production par réacteur (7 jours)</h6>
-                        <canvas id="nuclearChart-pickering"></canvas>
-                    </div></div></div>
-                </div>
-
-                <p style="color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center; margin-top:18px; margin-bottom:18px;">
+                <p style="color:rgba(255,255,255,0.5); font-size:0.75rem; text-align:center; margin-top:12px; margin-bottom:18px;">
                     Réacteurs CANDU · Données IESO Ontario · NRC Canada · Mis à jour toutes les 5 min · Historique 7 jours (30 min)
                 </p>
                 <div class="tab-actions">
@@ -2178,6 +2162,9 @@ async function loadNuclearTab() {
                 <div class="nuclear-total-bar-fill" style="width:${Math.min(100,cfPlant)}%;background:${plant.color}"></div>
             </div>
             <div class="nuclear-units">${unitRows}</div>
+            <div style="height:180px; margin-top:12px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
+                <canvas id="nuclearChart-${plant.id}" style="max-height:160px;"></canvas>
+            </div>
         </div>`;
     }).join('');
 
