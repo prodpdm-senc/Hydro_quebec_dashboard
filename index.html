@@ -1377,7 +1377,7 @@ const PROVINCES = [
 // GitHub workflow fetches and caches ontario_total in history.json every 30 minutes.
 async function fetchOntarioIESO() {
     try {
-        const res = await fetch(`${_ghBase}/data/history.json`, { signal: AbortSignal.timeout(8000) });
+        const res = await fetch(`${_ghBase}/data/history.json?t=${Date.now()}`, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
