@@ -956,8 +956,18 @@ async function loadDemandTabWithHistory() {
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.demand.map(d => ({ type: "demand", date: d.date, valeurs: d.valeurs })));
 
-        // ── Use indexDonneePlusRecent for current value (reliable) ──
-        const cur = json.details[json.indexDonneePlusRecent];
+        // ── Use indexDonneePlusRecent for current value, fallback to last valid entry ──
+        let cur = json.details[json.indexDonneePlusRecent];
+        // If current index has no data, find last entry with valid demandeTotal
+        if (!cur?.valeurs?.demandeTotal) {
+            for (let i = json.details.length - 1; i >= 0; i--) {
+                if (json.details[i].valeurs?.demandeTotal) {
+                    cur = json.details[i];
+                    break;
+                }
+            }
+        }
+        if (!cur?.valeurs?.demandeTotal) throw new Error('Aucune valeur demande valide trouvée');
         set('d-current',      fmtMW(cur.valeurs.demandeTotal));
         set('d-current-time', 'Au ' + fmtDate(cur.date));
 
