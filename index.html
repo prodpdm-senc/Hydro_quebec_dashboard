@@ -2392,6 +2392,8 @@ setInterval(() => {
     loadHistoricalDataToStore();
     log('🚀 Initialisation dashboard ');
     try {
+        // Load critical demand data first
+        await loadDemandTabWithHistory();
         await loadCanadaTab();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
