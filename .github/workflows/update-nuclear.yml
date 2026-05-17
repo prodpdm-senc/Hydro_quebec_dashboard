@@ -88,16 +88,38 @@ jobs:
           try:
               print("Fetching Ontario total output...")
               ieso_url = 'https://reports.ieso.ca/public/RealtimeConstTotals/PUB_RealtimeConstTotals.xml'
-              req = urllib.request.Request(ieso_url, headers={'User-Agent': 'Mozilla/5.0'})
-              with urllib.request.urlopen(req, timeout=10) as resp:
+              req = urllib.request.Request(ieso_url, headers={
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              })
+              with urllib.request.urlopen(req, timeout=15) as resp:
                   ieso_xml = resp.read()
+
+              # Log response info for debugging
+              print(f"IESO response: {len(ieso_xml)} bytes, starts with: {ieso_xml[:100]}")
+
               ieso_root = ET.fromstring(ieso_xml)
-              total_el = ieso_root.find('.//TotalOutput') or ieso_root.find('.//MarketDemand') or ieso_root.find('.//TotalEnergy')
+
+              # Try multiple element names with namespace awareness
+              total_el = (ieso_root.find('.//TotalOutput') or
+                         ieso_root.find('.//{http://www.theIMO.com/schema}TotalOutput') or
+                         ieso_root.find('.//MarketDemand') or
+                         ieso_root.find('.//{http://www.theIMO.com/schema}MarketDemand') or
+                         ieso_root.find('.//TotalEnergy') or
+                         ieso_root.find('.//{http://www.theIMO.com/schema}TotalEnergy'))
+
               if total_el is not None:
-                  ontario_total = int(float(total_el.text))
-                  print(f"Ontario total output: {ontario_total} MW")
+                  total_text = total_el.text.strip() if total_el.text else None
+                  if total_text:
+                      ontario_total = int(float(total_text))
+                      print(f"✅ Ontario total output: {ontario_total} MW")
+                  else:
+                      print(f"⚠️ Found element but no text: {ET.tostring(total_el)[:200]}")
+              else:
+                  # Log available elements for debugging
+                  all_tags = set([child.tag for child in ieso_root.iter()])
+                  print(f"⚠️ Element not found. Available tags: {all_tags}")
           except Exception as e:
-              print(f"Could not fetch Ontario total: {e}")
+              print(f"❌ Could not fetch Ontario total: {e}")
 
           # ── history.json : rolling 7 jours, résolution 30 min ───────────────
           PLANT_GROUPS = {
