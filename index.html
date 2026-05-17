@@ -1377,9 +1377,15 @@ const PROVINCES = [
 // GitHub workflow fetches and caches ontario_total in history.json every 30 minutes.
 async function fetchOntarioIESO() {
     try {
-        const res = await fetch(`${_ghBase}/data/history.json?t=${Date.now()}`, { signal: AbortSignal.timeout(8000) });
+        // Use GitHub API to bypass CDN caching issues
+        const apiUrl = 'https://api.github.com/repos/prodpdm-senc/Hydro_quebec_dashboard/contents/data/history.json?t=' + Date.now();
+        const res = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const apiData = await res.json();
+
+        // Decode base64 content from API response
+        const jsonStr = atob(apiData.content);
+        const data = JSON.parse(jsonStr);
 
         if (data.data && data.data.length > 0) {
             const latest = data.data[data.data.length - 1];
