@@ -2200,12 +2200,33 @@ async function showPlantChart(plantId) {
         const unitDataMap = {};
         unitNames.forEach(u => unitDataMap[u] = []);
 
+        // Check if we have the new plants structure; if not, fetch nuclear.json for fallback
+        let hasPlantData = histData.data.some(s => s.plants?.[plantId]?.units);
+        let nuclearData = null;
+        if (!hasPlantData) {
+            try {
+                const nuc = await corsGet(isLocalhost ? 'http://localhost:3001/proxy?url=https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/nuclear.json' : 'https://raw.githubusercontent.com/prodpdm-senc/Hydro_quebec_dashboard/main/data/nuclear.json');
+                nuclearData = await nuc.json();
+            } catch (e) {
+                console.warn('Could not fetch nuclear.json for fallback:', e);
+            }
+        }
+
         histData.data.forEach(snapshot => {
             labels.push(xLabel(snapshot.ts));
             const plantData = snapshot.plants?.[plantId];
             if (plantData?.units) {
                 unitNames.forEach(u => {
                     unitDataMap[u].push(plantData.units[u] || 0);
+                });
+            } else if (nuclearData?.units) {
+                // Fallback: estimate unit breakdown based on current ratio when plants structure missing
+                const plantTotal = snapshot[plantId] || 0;
+                const nuclearTotal = Object.values(nuclearData.units).reduce((s, arr) => s + (arr[arr.length - 1] || 0), 0);
+                const ratio = nuclearTotal > 0 ? plantTotal / nuclearTotal : 0;
+                unitNames.forEach(u => {
+                    const nuclearValue = nuclearData.units[u]?.[nuclearData.units[u].length - 1] || 0;
+                    unitDataMap[u].push(Math.round(nuclearValue * ratio));
                 });
             }
         });
