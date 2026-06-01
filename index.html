@@ -1066,52 +1066,91 @@ function renderProductionCharts() {
     const recent = sliceByPeriod(store.production);
     if (!recent.length) return;
 
-    const labels   = recent.map(r => xLabel(r.date));
-    const datasets = [
-        { label:'Hydraulique', data:recent.map(r=>r.valeurs.hydraulique||0), backgroundColor:'rgba(42,111,168,0.7)',  borderColor:'#2a6fa8', borderWidth:1 },
-        { label:'Éolien',      data:recent.map(r=>r.valeurs.eolien||0),      backgroundColor:'rgba(46,139,106,0.7)',   borderColor:'#2e8b6a', borderWidth:1 },
-        { label:'Thermique',   data:recent.map(r=>r.valeurs.thermique||0),   backgroundColor:'rgba(158,61,61,0.7)',   borderColor:'#9e3d3d', borderWidth:1 },
-        { label:'Solaire',     data:recent.map(r=>r.valeurs.solaire||0),     backgroundColor:'rgba(196,122,46,0.7)',   borderColor:'#c47a2e', borderWidth:1 },
-        { label:'Autres',      data:recent.map(r=>r.valeurs.autres||0),      backgroundColor:'rgba(158,158,158,0.7)', borderColor:'#7a8fa6', borderWidth:1 }
-    ].filter(ds => ds.data.some(v => v > 0));
+    const labels = recent.map(r => xLabel(r.date));
 
-    // Y-axis : plancher = 90% du minimum hydraulique (série la plus basse), zéros exclus
-    const totals  = recent.map(r => { const v=r.valeurs; return (v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0); });
-    const maxTotal = Math.max(...totals);
-    const hydroNonZero = recent.map(r => r.valeurs.hydraulique || 0).filter(v => v > 0);
-    const minHydro = hydroNonZero.length ? Math.min(...hydroNonZero) : Math.min(...totals);
-    const yMin = Math.floor(minHydro * 0.90);
-    const { text, grid } = chartColors();
+    const datasets = [
+        {
+            label: 'Hydraulique',
+            data: recent.map(r => r.valeurs.hydraulique || 0),
+            backgroundColor: 'rgba(30, 136, 229, 0.75)',
+            borderColor: '#1e88e5',
+            borderWidth: 1.5,
+            fill: true,
+            tension: 0.4
+        },
+        {
+            label: 'Éolien',
+            data: recent.map(r => r.valeurs.eolien || 0),
+            backgroundColor: 'rgba(142, 36, 170, 0.7)',
+            borderColor: '#8e24aa',
+            borderWidth: 1.5,
+            fill: true,
+            tension: 0.4
+        },
+        {
+            label: 'Thermique',
+            data: recent.map(r => r.valeurs.thermique || 0),
+            backgroundColor: 'rgba(229, 57, 53, 0.65)',
+            borderColor: '#e53935',
+            borderWidth: 1.5,
+            fill: true,
+            tension: 0.4
+        },
+        {
+            label: 'Solaire',
+            data: recent.map(r => r.valeurs.solaire || 0),
+            backgroundColor: 'rgba(251, 140, 0, 0.7)',
+            borderColor: '#fb8c00',
+            borderWidth: 1.5,
+            fill: true,
+            tension: 0.4
+        },
+        {
+            label: 'Autres',
+            data: recent.map(r => r.valeurs.autres || 0),
+            backgroundColor: 'rgba(84, 110, 122, 0.6)',
+            borderColor: '#546e7a',
+            borderWidth: 1.5,
+            fill: true,
+            tension: 0.4
+        }
+    ].filter(ds => ds.data.some(v => v > 0));
 
     destroyChart('productionChart');
     charts['productionChart'] = new Chart(
         document.getElementById('productionChart').getContext('2d'),
         {
-            type:'line',
-            data:{ labels, datasets },
-            options:{
-                responsive:true, maintainAspectRatio:false,
-                plugins:{
-                    legend:{ position:'top', labels:{ font:{size:11}, color:text, boxWidth:16, padding:16 } },
-                    tooltip:{
-                        mode:'index', intersect:false,
-                        callbacks:{
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { font: { size: 11 } } },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
                             label: c => `${c.dataset.label} : ${Math.round(c.parsed.y).toLocaleString('fr-CA')} MW`,
                             footer: items => 'Total : ' + Math.round(items.reduce((s,i)=>s+(i.parsed.y||0),0)).toLocaleString('fr-CA') + ' MW'
                         }
                     }
                 },
-                interaction:{ mode:'index', intersect:false },
-                scales:{
-                    x:{ grid:{display:false}, ticks:{ color:text, maxRotation:0, maxTicksLimit:8, autoSkip:true, font:{size:11} } },
-                    y:{ stacked:true, min: yMin, grid:{color:grid}, ticks:{ color:text, callback:v=>v.toLocaleString('fr-CA')+' MW', font:{size:11} } }
-                },
-                layout:{ padding:{ bottom:10 } }
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 8 } },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        ticks: { callback: v => v.toLocaleString('fr-CA') + ' MW' }
+                    }
+                }
             }
         }
     );
 }
 
+    
 // ─────────────────────────────────────────────────────────────────────────────
 //  EXCHANGE TAB  (non-critical: CORS may fail silently)
 // ─────────────────────────────────────────────────────────────────────────────
