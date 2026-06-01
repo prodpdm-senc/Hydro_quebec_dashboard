@@ -4,9 +4,6 @@
   "description": "Readme",
   "main": "proxy-server.js",
   "scripts": {
-    "start": "node proxy-server.js",
-    "build": "webpack --mode production",
-    "dev": "node proxy-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -22,17 +19,9 @@
   },
   "homepage": "https://github.com/prodpdm-senc/Hydro_quebec_dashboard#readme",
   "dependencies": {
-    "compression": "^1.7.4",
+    "better-sqlite3": "^11.8.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "node-fetch": "^3.3.2"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.29.0",
-    "@babel/preset-env": "^7.29.5",
-    "babel-loader": "^9.2.1",
-    "terser-webpack-plugin": "^5.6.0",
-    "webpack": "^5.106.2",
-    "webpack-cli": "^5.1.4"
   }
 }
