@@ -1,90 +1,90 @@
 /**
  * Serveur Proxy CORS pour Hydro-Québec Dashboard
  * 
- * Version "Le plus simple" pour 7 jours de sauvegarde solide.
+ * Version "Le plus simple" (JSON) pour 7 jours de sauvegarde solide.
  * - Récupère les données régulièrement
- * - Sauvegarde tout dans un seul fichier SQLite (hq-history.db)
+ * - Sauvegarde dans des fichiers JSON quotidiens (data/*.jsonl)
  * - Garde automatiquement les 7 derniers jours
  * - Expose /api/history/* pour que le dashboard puisse lire l'historique
  */
 
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const nodeFetch = require('node-fetch');
-const Database = require('better-sqlite3');
 const fetch = globalThis.fetch || nodeFetch;
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ============================================================
-// SQLite - Sauvegarde 7 jours (le plus simple possible)
+// JSON 7 jours - Le plus simple possible (NDJSON par jour)
 // ============================================================
 
-const db = new Database('hq-history.db');
-db.pragma('journal_mode = WAL');
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Création des tables (si elles n'existent pas)
-db.exec(`
-  CREATE TABLE IF NOT EXISTS demand (
-    timestamp TEXT PRIMARY KEY,
-    data TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS production (
-    timestamp TEXT PRIMARY KEY,
-    data TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS exchange (
-    timestamp TEXT PRIMARY KEY,
-    data TEXT NOT NULL
-  );
-`);
-
-// Nettoyage automatique des données > 8 jours (marge de sécurité)
-function cleanupOldData() {
-  const cutoff = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-  const stmtDemand = db.prepare('DELETE FROM demand WHERE timestamp < ?');
-  const stmtProd = db.prepare('DELETE FROM production WHERE timestamp < ?');
-  const stmtExch = db.prepare('DELETE FROM exchange WHERE timestamp < ?');
-
-  const deletedDemand = stmtDemand.run(cutoff).changes;
-  const deletedProd = stmtProd.run(cutoff).changes;
-  const deletedExch = stmtExch.run(cutoff).changes;
-
-  if (deletedDemand + deletedProd + deletedExch > 0) {
-    console.log(`🧹 Nettoyage 7j : ${deletedDemand} demande, ${deletedProd} production, ${deletedExch} échanges supprimés`);
-  }
+function getDailyFile(type) {
+  const date = new Date().toISOString().slice(0, 10);
+  return path.join(DATA_DIR, `${type}-${date}.jsonl`);
 }
 
-// Sauvegarde d'un enregistrement
-function saveRecord(table, timestamp, data) {
+function appendRecord(type, timestamp, data) {
   try {
-    const stmt = db.prepare(`
-      INSERT OR REPLACE INTO ${table} (timestamp, data) VALUES (?, ?)
-    `);
-    stmt.run(timestamp, JSON.stringify(data));
+    const file = getDailyFile(type);
+    const line = JSON.stringify({ timestamp, data }) + '\n';
+    fs.appendFileSync(file, line);
   } catch (e) {
-    console.error(`Erreur sauvegarde ${table}:`, e.message);
+    console.error(`Erreur append ${type}:`, e.message);
   }
 }
 
-// Récupérer l'historique (utilisé par le dashboard)
-function getHistory(table, hours = 168) { // 168h = 7 jours
-  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const stmt = db.prepare(`
-    SELECT timestamp, data FROM ${table} 
-    WHERE timestamp >= ? 
-    ORDER BY timestamp ASC
-  `);
-  const rows = stmt.all(cutoff);
-  return rows.map(r => ({
-    timestamp: r.timestamp,
-    ...JSON.parse(r.data)
-  }));
+function cleanupOldFiles() {
+  const cutoff = Date.now() - (8 * 24 * 60 * 60 * 1000);
+  const files = fs.readdirSync(DATA_DIR);
+  let deleted = 0;
+
+  for (const f of files) {
+    const match = f.match(/^(demand|production|exchange)-(\d{4}-\d{2}-\d{2})\.jsonl$/);
+    if (match) {
+      const fileDate = new Date(match[2] + 'T00:00:00');
+      if (fileDate.getTime() < cutoff) {
+        fs.unlinkSync(path.join(DATA_DIR, f));
+        deleted++;
+      }
+    }
+  }
+  if (deleted > 0) {
+    console.log(`\ud83e\uddf9 Nettoyage 7j JSON : ${deleted} fichiers supprimés`);
+  }
+}
+
+function getHistory(type, hours = 168) {
+  const cutoff = Date.now() - (hours * 60 * 60 * 1000);
+  const files = fs.readdirSync(DATA_DIR)
+    .filter(f => f.startsWith(`${type}-`) && f.endsWith('.jsonl'))
+    .sort();
+
+  const result = [];
+  for (const f of files) {
+    try {
+      const content = fs.readFileSync(path.join(DATA_DIR, f), 'utf8');
+      const lines = content.trim().split('\n');
+      for (const line of lines) {
+        if (!line) continue;
+        const obj = JSON.parse(line);
+        if (new Date(obj.timestamp).getTime() >= cutoff) {
+          result.push(obj);
+        }
+      }
+    } catch (e) {}
+  }
+  return result;
 }
 
 // Nettoyage au démarrage
-cleanupOldData();
+cleanupOldFiles();
 
 // ============================================================
 // In-Memory Cache (gardé pour performance)
@@ -164,10 +164,10 @@ app.get('/api/hydro-quebec/demande', async (req, res) => {
 
     logRequest('GET', '/api/hydro-quebec/demande', response.status, time);
 
-    // Sauvegarde 7 jours
+    // Sauvegarde 7 jours (JSON)
     if (data && data.details && data.details.length > 0) {
       const latest = data.details[data.details.length - 1];
-      if (latest.date) saveRecord('demand', latest.date, latest);
+      if (latest.date) appendRecord('demand', latest.date, latest);
     }
 
     saveToCache(cacheKey, JSON.stringify(data), 'application/json');
@@ -198,7 +198,7 @@ app.get('/api/hydro-quebec/production', async (req, res) => {
 
     if (data && data.details && data.details.length > 0) {
       const latest = data.details[data.details.length - 1];
-      if (latest.date) saveRecord('production', latest.date, latest);
+      if (latest.date) appendRecord('production', latest.date, latest);
     }
 
     saveToCache(cacheKey, JSON.stringify(data), 'application/json');
@@ -231,7 +231,7 @@ app.get('/api/hydro-quebec/exchange', async (req, res) => {
     if (Array.isArray(data) && data.length > 0) {
       const latest = data[data.length - 1];
       const ts = latest.date || latest.fields?.date;
-      if (ts) saveRecord('exchange', ts, latest);
+      if (ts) appendRecord('exchange', ts, latest);
     }
 
     saveToCache(cacheKey, JSON.stringify(data), 'application/json');
@@ -246,14 +246,25 @@ app.get('/api/hydro-quebec/exchange', async (req, res) => {
 // ============================================================
 
 app.get('/health', (req, res) => {
-  const countDemand = db.prepare('SELECT COUNT(*) as c FROM demand').get().c;
-  const countProd = db.prepare('SELECT COUNT(*) as c FROM production').get().c;
-  const countExch = db.prepare('SELECT COUNT(*) as c FROM exchange').get().c;
+  // Simple count from today's files (for quick visibility)
+  const today = new Date().toISOString().slice(0, 10);
+  let countDemand = 0, countProd = 0, countExch = 0;
+
+  try {
+    const demandFile = path.join(DATA_DIR, `demand-${today}.jsonl`);
+    if (fs.existsSync(demandFile)) countDemand = fs.readFileSync(demandFile, 'utf8').trim().split('\n').filter(Boolean).length;
+
+    const prodFile = path.join(DATA_DIR, `production-${today}.jsonl`);
+    if (fs.existsSync(prodFile)) countProd = fs.readFileSync(prodFile, 'utf8').trim().split('\n').filter(Boolean).length;
+
+    const exchFile = path.join(DATA_DIR, `exchange-${today}.jsonl`);
+    if (fs.existsSync(exchFile)) countExch = fs.readFileSync(exchFile, 'utf8').trim().split('\n').filter(Boolean).length;
+  } catch (e) {}
 
   res.json({
     status: 'OK',
-    persistence: 'SQLite (7 jours)',
-    records: {
+    persistence: 'JSON files (7 jours)',
+    recordsToday: {
       demand: countDemand,
       production: countProd,
       exchange: countExch
@@ -262,7 +273,7 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/history/cleanup', (req, res) => {
-  cleanupOldData();
+  cleanupOldFiles();
   res.json({ status: 'cleanup done' });
 });
 
@@ -271,7 +282,7 @@ app.post('/history/cleanup', (req, res) => {
 // ============================================================
 
 app.listen(PORT, () => {
-  console.log(`\n✅ Proxy + Sauvegarde 7 jours SQLite lancé sur http://localhost:${PORT}`);
+  console.log(`\n\u2705 Proxy + Sauvegarde 7 jours (JSON files) lancé sur http://localhost:${PORT}`);
   console.log(`   Historique : /api/history/demand?hours=168`);
   console.log(`   Nettoyage manuel : POST /history/cleanup\n`);
 });
