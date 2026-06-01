@@ -71,17 +71,22 @@ function renderProductionChart(data) {
     return date.toLocaleDateString('fr-CA', { month: 'short', day: 'numeric' });
   });
 
+  console.log('[ProductionMix] Rendering stacked chart with sources:', sourceMap.map(s => s.label));
+
   // Extract sources for stacked mix (harmonized with Ontario "stacked shaded" style)
   // Map possible API field names to nice labels
   const sourceMap = [
-    { key: 'hydraulique', label: 'Hydraulique', color: { border: '#2E86AB', bg: 'rgba(46, 134, 171, 0.65)' } },
-    { key: 'eolien',      label: 'Éolien',      color: { border: '#A23B72', bg: 'rgba(162, 59, 114, 0.65)' } },
-    { key: 'solaire',     label: 'Solaire',     color: { border: '#F18F01', bg: 'rgba(241, 143, 1, 0.65)' } },
-    { key: 'thermique',   label: 'Thermique',   color: { border: '#C73E1D', bg: 'rgba(199, 62, 29, 0.65)' } },
-    { key: 'autres',      label: 'Autres',      color: { border: '#6C757D', bg: 'rgba(108, 117, 125, 0.55)' } }
+    { key: 'hydraulique', label: 'Hydraulique', color: { border: '#1e88e5', bg: 'rgba(30, 136, 229, 0.75)' } },
+    { key: 'eolien',      label: 'Éolien',      color: { border: '#8e24aa', bg: 'rgba(142, 36, 170, 0.7)' } },
+    { key: 'solaire',     label: 'Solaire',     color: { border: '#fb8c00', bg: 'rgba(251, 140, 0, 0.7)' } },
+    { key: 'thermique',   label: 'Thermique',   color: { border: '#e53935', bg: 'rgba(229, 57, 53, 0.65)' } },
+    { key: 'autres',      label: 'Autres',      color: { border: '#546e7a', bg: 'rgba(84, 110, 122, 0.6)' } }
   ];
 
-  const datasets = sourceMap.map(({ key, label, color }) => ({
+  // Order from bottom to top for nicer visual stacking (largest base first)
+  const orderedSourceMap = [...sourceMap].reverse();
+
+  const datasets = orderedSourceMap.map(({ key, label, color }) => ({
     label,
     data: last7Days.map(d => {
       const v = d.valeurs || {};
@@ -89,9 +94,9 @@ function renderProductionChart(data) {
     }),
     borderColor: color.border,
     backgroundColor: color.bg,
-    fill: 'stack',
-    tension: 0.4,
-    borderWidth: 1.5,
+    fill: 'stack',           // Stacked shaded curves
+    tension: 0.35,
+    borderWidth: 1.2,
     pointRadius: 0,
     pointHoverRadius: 4
   }));
