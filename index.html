@@ -776,15 +776,13 @@ async function loadExchangeTabWithHistory() {
         if (typeof StorageManager !== 'undefined') {
             StorageManager.saveBatch(store.exchange.map(d => ({ type:"exchange", date:d.date, valeurs:d })));
         }
-        // Ontario staleness: compare timestamp of most recent record vs now
-        const ontarioStale = (Date.now() - new Date(rec.date)) / 60000 > 90;
-        const staleNote = document.getElementById('ontarioStaleNote');
-        if (staleNote) staleNote.style.display = ontarioStale ? 'block' : 'none';
-        // Dim Ontario KPI card when stale
+        // Ontario toujours affiché — les 2 dernières heures sont tronquées côté graphique
+        set('e-on', Math.abs(Math.round(rec.exportations_ontario||0)).toLocaleString('fr-CA') + ' MW');
         const eOnCard = document.getElementById('e-on')?.closest('.card');
-        if (eOnCard) eOnCard.style.opacity = ontarioStale ? '0.35' : '1';
-        set('e-on', ontarioStale ? 'N/D' : Math.abs(Math.round(rec.exportations_ontario||0)).toLocaleString('fr-CA') + ' MW');
-        renderExchangeCharts(ontarioStale);
+        if (eOnCard) eOnCard.style.opacity = '1';
+        const staleNote = document.getElementById('ontarioStaleNote');
+        if (staleNote) staleNote.style.display = 'none';
+        renderExchangeCharts();
         const corsNote = document.getElementById('corsNote');
         if (corsNote) corsNote.style.display = 'none';
         log(`\u2705 \u00c9changes: ${store.exchange.length} pts · flux ${fmtMW(flow)} · Ontario ${ontarioStale?'masqu\u00e9':'actif'}`);
@@ -798,18 +796,17 @@ async function loadExchangeTabWithHistory() {
 function renderExchangeCharts(ontarioStale = false) {
     const disp = sliceByPeriod(store.exchange);
     if (!disp.length) return;
-    // When Ontario data is stale, zero it out point-by-point so the bar simply disappears
-    const onData = ontarioStale
-        ? disp.map(() => 0)
-        : disp.map(r => r.exportations_ontario || 0);
-    const labels = disp.map(r => xLabel(r.date));
+    // Trim the last 8 points (2h at 15-min intervals) from ALL series so the
+    // chart always ends on a complete data point across all 4 sources
+    const TRIM_PTS = 8;
+    const trimmed = disp.slice(0, disp.length - TRIM_PTS);
+    const labels = trimmed.map(r => xLabel(r.date));
     const { text, grid } = chartColors();
     const datasets = [
-        // Ontario only included when fresh; filtered out entirely when stale
-        ...(ontarioStale ? [] : [{label:'Ontario', data:onData, borderColor:'#2e8b6a', backgroundColor:'rgba(46,139,106,0.6)'}]),
-        {label:'New York',     data:disp.map(r=>r.exportations_newyork||0),        borderColor:'#4a7fa5', backgroundColor:'rgba(74,127,165,0.6)'},
-        {label:'New England',  data:disp.map(r=>r.exportations_newengland||0),     borderColor:'#d9a347', backgroundColor:'rgba(217,163,71,0.6)'},
-        {label:'New Brunswick',data:disp.map(r=>r.exportations_newbrunswick||0),   borderColor:'#888888', backgroundColor:'rgba(136,136,136,0.6)'},
+        {label:'Ontario',      data:trimmed.map(r=>r.exportations_ontario||0),      borderColor:'#2e8b6a', backgroundColor:'rgba(46,139,106,0.6)'},
+        {label:'New York',     data:trimmed.map(r=>r.exportations_newyork||0),       borderColor:'#4a7fa5', backgroundColor:'rgba(74,127,165,0.6)'},
+        {label:'New England',  data:trimmed.map(r=>r.exportations_newengland||0),    borderColor:'#d9a347', backgroundColor:'rgba(217,163,71,0.6)'},
+        {label:'New Brunswick',data:trimmed.map(r=>r.exportations_newbrunswick||0),  borderColor:'#888888', backgroundColor:'rgba(136,136,136,0.6)'},
     ];
     destroyChart('exchangeChart');
     charts['exchangeChart'] = new Chart(document.getElementById('exchangeChart').getContext('2d'), {
