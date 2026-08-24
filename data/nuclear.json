@@ -1,74 +1,91 @@
 {
-  "updated": "2026-08-24T07:38:30Z",
+  "updated": "2026-08-24T08:53:11Z",
   "date": "2026-08-24",
   "hours": [
     1,
-    2
+    2,
+    3
   ],
   "units": {
     "BRUCEA-G1": [
+      801,
       801,
       801
     ],
     "BRUCEA-G2": [
       796,
+      796,
       796
     ],
     "BRUCEA-G3": [
       785,
-      786
+      786,
+      782
     ],
     "BRUCEA-G4": [
+      0,
       0,
       0
     ],
     "BRUCEB-G5": [
       0,
+      1,
       1
     ],
     "BRUCEB-G6": [
       802,
+      805,
       805
     ],
     "BRUCEB-G7": [
+      809,
       809,
       809
     ],
     "BRUCEB-G8": [
       810,
+      810,
       810
     ],
     "DARLINGTON-G1": [
       861,
+      862,
       862
     ],
     "DARLINGTON-G2": [
+      0,
       0,
       0
     ],
     "DARLINGTON-G3": [
       0,
+      0,
       0
     ],
     "DARLINGTON-G4": [
+      0,
       0,
       0
     ],
     "PICKERINGB-G5": [
       503,
+      504,
       504
     ],
     "PICKERINGB-G6": [
       500,
-      502
+      502,
+      503
     ],
     "PICKERINGB-G7": [
+      512,
       512,
       512
     ],
     "PICKERINGB-G8": [
       509,
-      510
+      510,
+      511
     ]
   }
 }
