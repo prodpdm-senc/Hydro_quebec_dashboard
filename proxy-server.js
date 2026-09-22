@@ -241,183 +241,238 @@ app.get('/api/hydro-quebec/exchange', async (req, res) => {
   }
 });
 
-app.get('/api/hydro-quebec/reservoirs', async (req, res) => {
-  const cacheKey = 'hydro-reservoirs-all';
-  const cached = getFromCache(cacheKey, 30 * 60 * 1000); // Cache 30 min
-  if (cached) {
-    logRequest('GET', '/api/hydro-quebec/reservoirs', 200, 0, true);
-    return res.json(JSON.parse(cached.data));
+// ============================================================
+// Données hydrauliques Hydro-Québec (donnees.hydroquebec.com)
+//
+// Deux jeux de données, deux conventions de champs :
+//  - donnees-hydrometriques      : débits aux installations
+//      type   -> depil_json_type_point_donnee  ("Débit turbiné - La Grande-4")
+//      date   -> split_date   (TEXTE, format "2026/09/11T16:00:00Z")
+//      valeur -> split_value  (TEXTE)
+//  - donnees-hydrometeorologiques : niveaux, débits en rivière, météo
+//      type   -> composition_depil_type_point_donnee  ("Niveau")
+//      date   -> date    (datetime ISO, filtrable côté serveur)
+//      valeur -> valeur  (TEXTE)
+//
+// On passe par /exports/json et non /records : /records plafonne à
+// limit=100 (HTTP 400 au-delà), alors que /exports/json rend le jeu
+// complet en une requête. Aucune pagination n'est donc nécessaire.
+// ============================================================
+
+const ODS_BASE = 'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets';
+
+async function odsExport(dataset, { where, select } = {}) {
+  const params = new URLSearchParams({ lang: 'fr' });
+  if (where) params.set('where', where);
+  if (select) params.set('select', select);
+
+  const url = `${ODS_BASE}/${dataset}/exports/json?${params.toString()}`;
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+    timeout: 90000
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`HTTP ${response.status} — ${body.slice(0, 200)}`);
   }
 
-  try {
-    const start = Date.now();
-    console.log('💧 Récupération TOUS les niveaux de réservoirs...');
-    const data = await fetchAllRecordsFromAPI(
-      'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/donnees-hydrometeorologiques/records',
-      'composition_depil_type_point_donnee="Niveau"'
-    );
-    const time = Date.now() - start;
-
-    logRequest('GET', '/api/hydro-quebec/reservoirs', 200, time);
-    console.log(`✅ ${data.length} records réservoirs en ${time}ms`);
-
-    if (Array.isArray(data) && data.length > 0) {
-      const latest = data[data.length - 1];
-      const ts = latest.split_date || latest.date;
-      if (ts) appendRecord('reservoirs', ts, latest);
-    }
-
-    saveToCache(cacheKey, JSON.stringify(data), 'application/json');
-    res.json(data);
-  } catch (err) {
-    console.error('Erreur réservoirs:', err.message);
-    res.status(500).json({ error: 'Réservoirs indisponible', details: err.message });
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    // L'API renvoie {error_code, message} en cas de requête ODSQL invalide.
+    throw new Error(data && data.message ? data.message : 'Réponse inattendue de l\'API');
   }
-});
-
-app.get('/api/hydro-quebec/reservoirs-all', async (req, res) => {
-  const cacheKey = 'hydro-meteo-complete';
-  const cached = getFromCache(cacheKey, 60 * 60 * 1000); // Cache 1 heure
-  if (cached) {
-    logRequest('GET', '/api/hydro-quebec/reservoirs-all', 200, 0, true);
-    return res.json(JSON.parse(cached.data));
-  }
-
-  try {
-    const start = Date.now();
-    console.log('💧 Récupération TOUTES les données hydrometeoro...');
-    const data = await fetchAllRecordsFromAPI(
-      'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/donnees-hydrometeorologiques/records'
-    );
-    const time = Date.now() - start;
-
-    logRequest('GET', '/api/hydro-quebec/reservoirs-all', 200, time);
-    console.log(`✅ ${data.length} records hydrometeoro en ${time}ms`);
-
-    saveToCache(cacheKey, JSON.stringify(data), 'application/json');
-    res.json(data);
-  } catch (err) {
-    console.error('Erreur hydrometeo:', err.message);
-    res.status(500).json({ error: 'Données hydrometeo indisponibles', details: err.message });
-  }
-});
-
-// Fonction pour récupérer TOUTES les données avec pagination
-async function fetchAllRecordsFromAPI(baseUrl, where = null) {
-  let allRecords = [];
-  let offset = 0;
-  const limit = 1000;
-  let hasMore = true;
-
-  while (hasMore) {
-    const url = `${baseUrl}?limit=${limit}&offset=${offset}${where ? `&where=${encodeURIComponent(where)}` : ''}`;
-    try {
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
-        timeout: 15000
-      });
-      const json = await response.json();
-      const records = json.results || [];
-
-      if (records.length === 0) {
-        hasMore = false;
-      } else {
-        allRecords = allRecords.concat(records);
-        offset += limit;
-        console.log(`  📥 Récupéré ${allRecords.length} records...`);
-      }
-    } catch (e) {
-      console.error(`  ❌ Erreur à offset ${offset}:`, e.message);
-      hasMore = false;
-    }
-  }
-
-  return allRecords;
+  return data;
 }
 
-app.get('/api/hydro-quebec/turbined-flow', async (req, res) => {
-  const cacheKey = 'hydro-turbined-all';
-  const cached = getFromCache(cacheKey, 30 * 60 * 1000); // Cache 30 min
-  if (cached) {
-    logRequest('GET', '/api/hydro-quebec/turbined-flow', 200, 0, true);
-    return res.json(JSON.parse(cached.data));
-  }
+function toNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+}
 
-  try {
-    const start = Date.now();
-    console.log('⚡ Récupération TOUS les données débit turbiné...');
-    const data = await fetchAllRecordsFromAPI(
-      'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/donnees-hydrometriques/records',
-      'composition_depil_type_point_donnee="Débit total"'
-    );
-    const time = Date.now() - start;
+// "2026/09/11T16:00:00Z" n'est pas parsable par new Date() de façon fiable.
+function normalizeHydrometriqueDate(v) {
+  return typeof v === 'string' ? v.replace(/\//g, '-') : null;
+}
 
-    logRequest('GET', '/api/hydro-quebec/turbined-flow', 200, time);
-    console.log(`✅ ${data.length} records débit turbiné en ${time}ms`);
+function normHydrometrique(r) {
+  return {
+    nom: r.nom,
+    regionqc: r.regionqc,
+    type: r.depil_json_type_point_donnee,
+    unite: r.depil_json_nom_unite_mesure,
+    date: normalizeHydrometriqueDate(r.split_date),
+    valeur: toNumber(r.split_value)
+  };
+}
 
-    if (Array.isArray(data) && data.length > 0) {
-      const latest = data[data.length - 1];
-      const ts = latest.split_date || latest.date;
-      if (ts) appendRecord('turbined', ts, latest);
+function normHydrometeo(r) {
+  return {
+    nom: r.nom,
+    regionqc: r.regionqc,
+    type: r.composition_depil_type_point_donnee,
+    unite: r.composition_depil_nom_unite_mesure,
+    date: r.date,
+    valeur: toNumber(r.valeur)
+  };
+}
+
+function isoDaysAgo(days) {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function byDateAsc(a, b) {
+  return String(a.date).localeCompare(String(b.date));
+}
+
+// Petit wrapper : cache + log + gestion d'erreur, identiques pour chaque route.
+function cachedRoute(routePath, cacheKey, ttlMs, loader) {
+  app.get(routePath, async (req, res) => {
+    const cached = getFromCache(cacheKey, ttlMs);
+    if (cached) {
+      logRequest('GET', routePath, 200, 0, true);
+      return res.type(cached.contentType).send(cached.data);
     }
 
-    saveToCache(cacheKey, JSON.stringify(data), 'application/json');
-    res.json(data);
-  } catch (err) {
-    console.error('Erreur débit turbiné:', err.message);
-    res.status(500).json({ error: 'Débit turbiné indisponible', details: err.message });
-  }
+    const start = Date.now();
+    try {
+      const data = await loader(req);
+      const payload = JSON.stringify(data);
+      saveToCache(cacheKey, payload, 'application/json');
+      logRequest('GET', routePath, 200, Date.now() - start);
+      console.log(`   ✅ ${Array.isArray(data) ? data.length + ' enregistrements' : 'ok'}`);
+      res.type('application/json').send(payload);
+    } catch (err) {
+      logRequest('GET', routePath, 500, Date.now() - start);
+      console.error(`   ❌ ${routePath}: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  });
+}
+
+// ── Niveaux d'eau des réservoirs ────────────────────────────
+// ?days=N (défaut 7, max 90)
+cachedRoute('/api/hydro-quebec/reservoirs', 'hq-niveaux', 30 * 60 * 1000, async (req) => {
+  const days = Math.min(parseInt(req.query.days, 10) || 7, 90);
+  console.log(`💧 Niveaux d'eau — ${days} derniers jours`);
+
+  const raw = await odsExport('donnees-hydrometeorologiques', {
+    where: `composition_depil_type_point_donnee="Niveau" AND date > '${isoDaysAgo(days)}'`,
+    select: 'nom,regionqc,date,valeur,composition_depil_nom_unite_mesure,composition_depil_type_point_donnee'
+  });
+
+  const data = raw.map(normHydrometeo).filter(r => r.valeur !== null).sort(byDateAsc);
+  const latest = data[data.length - 1];
+  if (latest) appendRecord('reservoirs', latest.date, latest);
+  return data;
 });
 
-app.get('/api/hydro-quebec/turbined-flow-all', async (req, res) => {
-  const cacheKey = 'hydro-turbined-complete';
-  const cached = getFromCache(cacheKey, 60 * 60 * 1000); // Cache 1 heure
-  if (cached) {
-    logRequest('GET', '/api/hydro-quebec/turbined-flow-all', 200, 0, true);
-    return res.json(JSON.parse(cached.data));
+// ── Débit turbiné par centrale ──────────────────────────────
+// Le débit turbiné est le proxy du niveau de production d'une centrale :
+// il indique quelles centrales turbinent réellement.
+cachedRoute('/api/hydro-quebec/turbined-flow', 'hq-turbine', 30 * 60 * 1000, async () => {
+  console.log('⚡ Débits turbinés — toutes les centrales');
+
+  const raw = await odsExport('donnees-hydrometriques', {
+    where: 'depil_json_type_point_donnee LIKE "Débit turbiné"',
+    select: 'nom,regionqc,depil_json_type_point_donnee,depil_json_nom_unite_mesure,split_date,split_value'
+  });
+
+  const data = raw.map(normHydrometrique).filter(r => r.valeur !== null).sort(byDateAsc);
+  const latest = data[data.length - 1];
+  if (latest) appendRecord('turbined', latest.date, latest);
+  return data;
+});
+
+// ── Catalogue région → installation → type ──────────────────
+// Reproduit les trois sélecteurs en cascade du tableau de bord HQ.
+cachedRoute('/api/hydro-quebec/stations', 'hq-stations', 60 * 60 * 1000, async () => {
+  console.log('🗂  Catalogue des stations');
+
+  const [metriques, meteo] = await Promise.all([
+    odsExport('donnees-hydrometriques', {
+      select: 'nom,regionqc,depil_json_type_point_donnee,depil_json_nom_unite_mesure'
+    }),
+    odsExport('donnees-hydrometeorologiques', {
+      select: 'nom,regionqc,composition_depil_type_point_donnee,composition_depil_nom_unite_mesure'
+    })
+  ]);
+
+  const catalogue = {};
+  const add = (dataset, r) => {
+    if (!r.nom || !r.regionqc || !r.type) return;
+    const region = (catalogue[r.regionqc] ||= {});
+    const station = (region[r.nom] ||= []);
+    if (!station.some(t => t.type === r.type)) {
+      station.push({ type: r.type, unite: r.unite, dataset });
+    }
+  };
+
+  metriques.map(normHydrometrique).forEach(r => add('hydrometriques', r));
+  meteo.map(normHydrometeo).forEach(r => add('hydrometeorologiques', r));
+  return catalogue;
+});
+
+// ── Série temporelle ciblée ─────────────────────────────────
+// ?dataset=hydrometriques|hydrometeorologiques&type=...&station=...&days=N
+app.get('/api/hydro-quebec/timeseries', async (req, res) => {
+  const { dataset = 'hydrometriques', type, station } = req.query;
+  const days = Math.min(parseInt(req.query.days, 10) || 7, 90);
+
+  if (!type) {
+    return res.status(400).json({ error: 'Paramètre "type" requis' });
   }
 
+  const isMetrique = dataset === 'hydrometriques';
+  const cacheKey = `hq-ts:${dataset}:${type}:${station || '*'}:${days}`;
+  const cached = getFromCache(cacheKey, 15 * 60 * 1000);
+  if (cached) {
+    logRequest('GET', '/api/hydro-quebec/timeseries', 200, 0, true);
+    return res.type(cached.contentType).send(cached.data);
+  }
+
+  const start = Date.now();
   try {
-    const start = Date.now();
-    console.log('⚡ Récupération TOUTES les données hydrométriques...');
-    const data = await fetchAllRecordsFromAPI(
-      'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/donnees-hydrometriques/records'
+    const esc = (v) => String(v).replace(/"/g, '\\"');
+    const typeField = isMetrique
+      ? 'depil_json_type_point_donnee'
+      : 'composition_depil_type_point_donnee';
+
+    const clauses = [`${typeField}="${esc(type)}"`];
+    if (station) clauses.push(`nom="${esc(station)}"`);
+    // split_date est du texte côté hydrometriques : pas de filtre serveur possible.
+    if (!isMetrique) clauses.push(`date > '${isoDaysAgo(days)}'`);
+
+    const raw = await odsExport(
+      isMetrique ? 'donnees-hydrometriques' : 'donnees-hydrometeorologiques',
+      {
+        where: clauses.join(' AND '),
+        select: isMetrique
+          ? 'nom,regionqc,depil_json_type_point_donnee,depil_json_nom_unite_mesure,split_date,split_value'
+          : 'nom,regionqc,date,valeur,composition_depil_nom_unite_mesure,composition_depil_type_point_donnee'
+      }
     );
-    const time = Date.now() - start;
 
-    logRequest('GET', '/api/hydro-quebec/turbined-flow-all', 200, time);
-    console.log(`✅ ${data.length} records hydrométriques en ${time}ms`);
+    const data = raw
+      .map(isMetrique ? normHydrometrique : normHydrometeo)
+      .filter(r => r.valeur !== null)
+      .sort(byDateAsc);
 
-    saveToCache(cacheKey, JSON.stringify(data), 'application/json');
-    res.json(data);
+    const payload = JSON.stringify(data);
+    saveToCache(cacheKey, payload, 'application/json');
+    logRequest('GET', '/api/hydro-quebec/timeseries', 200, Date.now() - start);
+    res.type('application/json').send(payload);
   } catch (err) {
-    console.error('Erreur données hydrométriques:', err.message);
-    res.status(500).json({ error: 'Données hydrométriques indisponibles', details: err.message });
+    logRequest('GET', '/api/hydro-quebec/timeseries', 500, Date.now() - start);
+    console.error(`   ❌ timeseries: ${err.message}`);
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ============================================================
 // Utilitaires
 // ============================================================
-
-app.get('/api/debug/fetch-test', async (req, res) => {
-  try {
-    console.log('🧪 TEST: Tentative fetch depuis API...');
-    const url = 'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/donnees-hydrometriques/records?limit=10&offset=0';
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
-      timeout: 15000
-    });
-    console.log('🧪 Response status:', response.status);
-    const json = await response.json();
-    console.log('🧪 Response keys:', Object.keys(json));
-    console.log('🧪 Results count:', json.results?.length);
-    res.json({ status: 'ok', total_count: json.total_count, results_count: json.results?.length });
-  } catch (e) {
-    console.error('🧪 ERREUR:', e.message);
-    res.json({ error: e.message });
-  }
-});
 
 app.get('/health', (req, res) => {
   // Simple count from today's files (for quick visibility)

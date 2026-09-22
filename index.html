@@ -505,7 +505,7 @@
             <div class="tab-pane fade" id="tab-reservoirs">
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Niveau moyen réservoirs</div>
+                        <div class="stat-label">Centrales en production</div>
                         <div class="stat-value text-primary" id="r-level">--</div>
                         <div class="stat-time" id="r-level-time">--</div>
                     </div></div>
@@ -515,12 +515,12 @@
                         <div class="stat-time">m³/s</div>
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Réservoirs suivi</div>
+                        <div class="stat-label">Réservoirs suivis</div>
                         <div class="stat-value text-success" id="r-count">--</div>
                         <div class="stat-time">stations</div>
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Tendance</div>
+                        <div class="stat-label">Dernière donnée</div>
                         <div class="stat-value text-warning" id="r-trend">--</div>
                         <div class="stat-time" id="r-trend-time">--</div>
                     </div></div>
@@ -538,13 +538,13 @@
                 <div class="row g-3 mb-3">
                     <div class="col-lg-6"><div class="card">
                         <div style="padding: 16px;">
-                            <h6 class="mb-3">⚡ Débit turbiné total</h6>
+                            <h6 class="mb-3">⚡ Débit turbiné par centrale <small class="text-muted">(cliquez)</small></h6>
                             <div class="production-grid" id="turbinedFlowGrid"></div>
                         </div>
                     </div></div>
                     <div class="col-lg-6"><div class="card">
                         <div style="padding: 16px;">
-                            <h6 class="mb-3">💧 Tous les réservoirs</h6>
+                            <h6 class="mb-3">💧 Niveaux des réservoirs <small class="text-muted">(cliquez)</small></h6>
                             <div class="production-grid" id="allReservoirsGrid"></div>
                         </div>
                     </div></div>
@@ -2581,171 +2581,201 @@ document.getElementById('btn-reservoirs').addEventListener('shown.bs.tab', () =>
 // ─────────────────────────────────────────────────────────────────────────────
 //  RÉSERVOIRS - Niveaux d'eau et débit turbiné
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  RÉSERVOIRS & DÉBIT TURBINÉ
+//  L'API ODS d'Hydro-Québec renvoie access-control-allow-origin: *, donc on
+//  peut l'appeler directement depuis GitHub Pages. En local on passe par le
+//  proxy, qui ajoute le cache et la persistance 7 jours.
+// ─────────────────────────────────────────────────────────────────────────────
+const ODS = 'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets';
+
+const HYDRO_SOURCES = {
+    niveaux: {
+        proxy: 'http://localhost:3001/api/hydro-quebec/reservoirs',
+        direct: `${ODS}/donnees-hydrometeorologiques/exports/json?lang=fr`
+              + `&select=nom,regionqc,date,valeur,composition_depil_nom_unite_mesure`
+              + `&where=${encodeURIComponent('composition_depil_type_point_donnee="Niveau" AND date > \'' + hydroDaysAgo(7) + '\'')}`,
+        normalize: r => ({ nom: r.nom, date: r.date, valeur: parseFloat(r.valeur), unite: r.composition_depil_nom_unite_mesure || 'm' })
+    },
+    turbine: {
+        proxy: 'http://localhost:3001/api/hydro-quebec/turbined-flow',
+        direct: `${ODS}/donnees-hydrometriques/exports/json?lang=fr`
+              + `&select=nom,regionqc,depil_json_type_point_donnee,depil_json_nom_unite_mesure,split_date,split_value`
+              + `&where=${encodeURIComponent('depil_json_type_point_donnee LIKE "Débit turbiné"')}`,
+        // split_date arrive en "2026/09/11T16:00:00Z" : non parsable tel quel.
+        normalize: r => ({ nom: r.nom, date: String(r.split_date || '').replace(/\//g, '-'), valeur: parseFloat(r.split_value), unite: r.depil_json_nom_unite_mesure || 'm³/s' })
+    }
+};
+
+function hydroDaysAgo(days) {
+    return new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+}
+
+async function hydroFetch(kind) {
+    const src = HYDRO_SOURCES[kind];
+    const res = await corsGet(isLocalhost ? src.proxy : src.direct);
+    const raw = await res.json();
+    if (!Array.isArray(raw)) throw new Error(raw && raw.message ? raw.message : 'Réponse inattendue');
+
+    // Le proxy renvoie déjà des enregistrements normalisés.
+    const rows = isLocalhost ? raw : raw.map(src.normalize);
+    return rows
+        .filter(r => r.nom && r.date && Number.isFinite(r.valeur))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+function groupByName(rows) {
+    const out = {};
+    rows.forEach(r => (out[r.nom] ||= []).push(r));
+    return out;
+}
+
+let reservoirState = { niveaux: {}, turbine: {} };
+
 async function loadReservoirsData() {
-    log('🏞 Chargement Réservoirs');
+    log('🏞 Chargement Réservoirs + débits turbinés');
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
     try {
-        const res = await corsGet('http://localhost:3001/api/hydro-quebec/reservoirs');
-        const data = await res.json();
+        const [niveauxRows, turbineRows] = await Promise.all([
+            hydroFetch('niveaux'),
+            hydroFetch('turbine')
+        ]);
 
-        if (!Array.isArray(data) || data.length === 0) throw new Error('Aucune donnée réservoir');
+        const niveaux = groupByName(niveauxRows);
+        const turbine = groupByName(turbineRows);
+        reservoirState = { niveaux, turbine };
 
-        // Parse data by station
-        const byStation = {};
-        data.forEach(record => {
-            const station = record.nom || 'Unknown';
-            if (!byStation[station]) byStation[station] = [];
-            byStation[station].push({ date: record.date, value: parseFloat(record.valeur) || 0 });
-        });
+        // Dernière valeur connue par centrale : somme = débit turbiné total.
+        const latestPerCentrale = Object.entries(turbine)
+            .map(([nom, rows]) => ({ nom, ...rows[rows.length - 1] }))
+            .sort((a, b) => b.valeur - a.valeur);
 
-        // Calculate stats
-        const allValues = Object.values(byStation).flat().map(r => r.value).filter(v => v > 0);
-        const avgLevel = allValues.length > 0 ? (allValues.reduce((a, b) => a + b, 0) / allValues.length).toFixed(2) : '--';
-        const trend = allValues.length > 1 ? ((allValues[allValues.length - 1] - allValues[0]) * 100 / allValues[0]).toFixed(1) : '0';
+        const totalFlow = latestPerCentrale.reduce((sum, c) => sum + c.valeur, 0);
+        const actives = latestPerCentrale.filter(c => c.valeur > 0).length;
+        const lastDate = turbineRows.length ? turbineRows[turbineRows.length - 1].date : null;
 
-        // Fetch turbined flow
-        const flowRes = await corsGet('http://localhost:3001/api/hydro-quebec/turbined-flow');
-        const flowData = await flowRes.json();
-        const totalFlow = flowData.length > 0 ? (parseFloat(flowData[flowData.length - 1].valeur) || 0).toFixed(0) : '--';
+        setText('r-flow', Math.round(totalFlow).toLocaleString('fr-CA'));
+        setText('r-level', `${actives} / ${latestPerCentrale.length}`);
+        setText('r-level-time', 'centrales qui turbinent');
+        setText('r-count', Object.keys(niveaux).length);
+        setText('r-trend', lastDate ? new Date(lastDate).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' }) : '--');
+        setText('r-trend-time', lastDate ? new Date(lastDate).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }) : '--');
 
-        // Update KPI display
-        document.getElementById('r-level').textContent = avgLevel + ' m';
-        document.getElementById('r-level-time').textContent = new Date().toLocaleTimeString('fr-CA');
-        document.getElementById('r-flow').textContent = totalFlow;
-        document.getElementById('r-count').textContent = Object.keys(byStation).length;
-        document.getElementById('r-trend').textContent = (trend > 0 ? '+' : '') + trend + '%';
-        document.getElementById('r-trend-time').textContent = trend > 0 ? '↑ hausse' : trend < 0 ? '↓ baisse' : '→ stable';
+        renderCentraleGrid(latestPerCentrale);
+        renderReservoirGrid(niveaux);
 
-        // Render chart (top 5 stations)
-        renderReservoirsChart(byStation);
+        // Vue par défaut : la centrale qui turbine le plus.
+        if (latestPerCentrale.length) selectCentrale(latestPerCentrale[0].nom);
 
-        // Render turbined flow grid
-        const turbinedGrid = document.getElementById('turbinedFlowGrid');
-        turbinedGrid.innerHTML = '';
-        if (flowData.length > 0) {
-            const latest = flowData[flowData.length - 1];
-            const flow = parseFloat(latest.valeur) || 0;
-            const flowCard = document.createElement('div');
-            flowCard.className = 'production-card card';
-            flowCard.innerHTML = `
-                <div class="production-label">Débit total</div>
-                <div class="production-value">${flow.toFixed(0)}</div>
-                <div class="production-percent" style="color: ${flow > 5000 ? '#27ae60' : '#e74c3c'};">
-                    ${flow > 0 ? '⚡ Actif' : '⏸ Arrêt'}
-                </div>
-            `;
-            turbinedGrid.appendChild(flowCard);
-        }
+        log(`✅ ${latestPerCentrale.length} centrales · ${Object.keys(niveaux).length} réservoirs`);
+    } catch (err) {
+        log('❌ Erreur réservoirs: ' + err.message);
+        setText('r-flow', '❌');
+        setText('r-level', '--');
+        const grid = document.getElementById('turbinedFlowGrid');
+        if (grid) grid.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+    }
+}
 
-        // Render all reservoirs grid with click handlers
-        const allResGrid = document.getElementById('allReservoirsGrid');
-        allResGrid.innerHTML = '';
-        Object.entries(byStation).forEach(([station, records]) => {
-            if (records.length === 0) return;
-            const latest = records[records.length - 1];
-            const level = latest.value || 0;
-            const trend = records.length > 1 ? (latest.value - records[0].value) : 0;
-            const trendColor = trend > 0 ? '#27ae60' : trend < 0 ? '#e74c3c' : '#95a5a6';
+function renderCentraleGrid(latestPerCentrale) {
+    const grid = document.getElementById('turbinedFlowGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    latestPerCentrale.forEach(c => {
+        const turbining = c.valeur > 0;
+        const card = document.createElement('div');
+        card.className = 'production-card card';
+        card.style.cursor = 'pointer';
+        card.innerHTML = `
+            <div class="production-label">${c.nom}</div>
+            <div class="production-value">${Math.round(c.valeur).toLocaleString('fr-CA')} <small>m³/s</small></div>
+            <div class="production-percent" style="color:${turbining ? '#27ae60' : '#95a5a6'}">
+                ${turbining ? '⚡ turbine' : '⏸ arrêt'}
+            </div>`;
+        card.addEventListener('click', () => selectCentrale(c.nom));
+        grid.appendChild(card);
+    });
+}
+
+function renderReservoirGrid(niveaux) {
+    const grid = document.getElementById('allReservoirsGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    Object.entries(niveaux)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .forEach(([nom, rows]) => {
+            const last = rows[rows.length - 1];
+            const delta = rows.length > 1 ? last.valeur - rows[0].valeur : 0;
+            const color = delta > 0 ? '#27ae60' : delta < 0 ? '#e74c3c' : '#95a5a6';
 
             const card = document.createElement('div');
             card.className = 'production-card card';
             card.style.cursor = 'pointer';
-            card.dataset.station = station;
             card.innerHTML = `
-                <div class="production-label">${station.substring(0, 20)}</div>
-                <div class="production-value">${level.toFixed(1)}</div>
-                <div class="production-percent" style="color: ${trendColor};">
-                    ${trend > 0 ? '+' : ''}${trend.toFixed(1)} m
-                </div>
-            `;
-            card.addEventListener('click', () => filterReservoirChart(station, byStation, flowData));
-            card.addEventListener('mouseover', () => card.style.transform = 'scale(1.05)');
-            card.addEventListener('mouseout', () => card.style.transform = 'scale(1)');
-            allResGrid.appendChild(card);
+                <div class="production-label">${nom}</div>
+                <div class="production-value">${last.valeur.toFixed(2)} <small>m</small></div>
+                <div class="production-percent" style="color:${color}">
+                    ${delta > 0 ? '+' : ''}${delta.toFixed(2)} m / 7 j
+                </div>`;
+            card.addEventListener('click', () => selectReservoir(nom));
+            grid.appendChild(card);
         });
+}
 
-    } catch (err) {
-        log('❌ Erreur réservoirs: ' + err.message);
-        document.getElementById('r-level').textContent = '❌';
+function hydroLineChart(canvasId, titleId, title, rows, label, color) {
+    const canvas = document.getElementById(canvasId);
+    const heading = document.getElementById(titleId);
+    if (heading) heading.textContent = title;
+    if (!canvas || !window.chartManager) return;
+
+    const pts = rows.slice(-336); // 14 jours de données horaires
+    window.chartManager.createOrUpdate(canvas, 'line', {
+        labels: pts.map(r => new Date(r.date).toLocaleString('fr-CA', { month: 'short', day: 'numeric', hour: '2-digit' })),
+        datasets: [{
+            label,
+            data: pts.map(r => r.valeur),
+            borderColor: color,
+            backgroundColor: color + '20',
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: true
+        }]
+    }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            y: { beginAtZero: false, ticks: { color: 'var(--text-primary)' } },
+            x: { ticks: { color: 'var(--text-primary)', maxTicksLimit: 12 } }
+        }
+    });
+}
+
+// Une centrale : son débit turbiné + le niveau du réservoir associé s'il existe.
+function selectCentrale(nom) {
+    const rows = reservoirState.turbine[nom] || [];
+    hydroLineChart('turbineChart', 'turbineChartTitle',
+        `Débit turbiné — ${nom}`, rows, 'm³/s', '#e74c3c');
+
+    const match = Object.keys(reservoirState.niveaux)
+        .find(n => n === nom || n.startsWith(nom + ' '));
+    if (match) {
+        selectReservoir(match, false);
+    } else {
+        hydroLineChart('reservoirsChart', 'chartTitle',
+            'Niveau d\'eau — sélectionnez un réservoir', [], 'm', '#3498db');
     }
 }
 
-function renderReservoirsChart(byStation) {
-    const canvas = document.getElementById('reservoirsChart');
-    if (!canvas || !window.chartManager) return;
-
-    const stations = Object.keys(byStation).slice(0, 5);
-    const allDates = new Set();
-    stations.forEach(s => byStation[s].forEach(r => allDates.add(r.date)));
-    const dates = Array.from(allDates).sort().slice(-24); // Last 24 hours
-
-    const labels = dates.map(d => new Date(d).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
-    const colors = ['#3498db', '#2ecc71', '#f39c12', '#e74c3c', '#9b59b6'];
-
-    const datasets = stations.map((station, idx) => ({
-        label: station.substring(0, 15),
-        data: dates.map(d => {
-            const record = byStation[station].find(r => r.date === d);
-            return record ? record.value : null;
-        }),
-        borderColor: colors[idx],
-        backgroundColor: colors[idx] + '20',
-        tension: 0.3
-    }));
-
-    window.chartManager.createOrUpdate(canvas, 'line', { labels, datasets }, {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { ticks: { color: 'var(--text-primary)' } }, x: { ticks: { color: 'var(--text-primary)' } } }
-    });
-}
-
-function filterReservoirChart(station, byStation, flowData) {
-    const canvas = document.getElementById('reservoirsChart');
-    const turbineCanvas = document.getElementById('turbineChart');
-    if (!canvas || !turbineCanvas || !window.chartManager) return;
-
-    // Niveau chart for selected reservoir
-    const records = byStation[station] || [];
-    const dates = records.map(r => r.date).slice(-24);
-    const levelLabels = dates.map(d => new Date(d).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
-
-    window.chartManager.createOrUpdate(canvas, 'line', {
-        labels: levelLabels,
-        datasets: [{
-            label: station,
-            data: records.slice(-24).map(r => r.value),
-            borderColor: '#3498db',
-            backgroundColor: '#3498db20',
-            tension: 0.3
-        }]
-    }, {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { ticks: { color: 'var(--text-primary)' } }, x: { ticks: { color: 'var(--text-primary)' } } }
-    });
-
-    // Turbined flow chart
-    const flowRecords = Array.isArray(flowData) ? flowData : [];
-    const flowDates = flowRecords.length > 0 ? flowRecords.map(r => r.date || r.split_date).slice(-24) : [];
-    const flowLabels = flowDates.map(d => new Date(d).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
-
-    window.chartManager.createOrUpdate(turbineCanvas, 'line', {
-        labels: flowLabels,
-        datasets: [{
-            label: 'Débit turbiné',
-            data: flowRecords.slice(-24).map(r => parseFloat(r.valeur) || 0),
-            borderColor: '#e74c3c',
-            backgroundColor: '#e74c3c20',
-            tension: 0.3
-        }]
-    }, {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { ticks: { color: 'var(--text-primary)' } }, x: { ticks: { color: 'var(--text-primary)' } } }
-    });
-
-    document.getElementById('chartTitle').textContent = `Niveau d'eau - ${station} (24h)`;
-    document.getElementById('turbineChartTitle').textContent = 'Débit turbiné total (24h)';
+function selectReservoir(nom, scroll = true) {
+    const rows = reservoirState.niveaux[nom] || [];
+    hydroLineChart('reservoirsChart', 'chartTitle',
+        `Niveau d'eau — ${nom}`, rows, 'm', '#3498db');
+    if (scroll) document.getElementById('reservoirsChart')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
