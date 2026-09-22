@@ -575,6 +575,33 @@
                     <h6 class="mb-2">Échanges nets <span id="rng-exch">(plage complète)</span> — vert = export, orange = import</h6>
                     <canvas id="exchangeChart"></canvas>
                 </div></div>
+
+                <h5 class="section-title">🌍 Bilan carbone des échanges</h5>
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Intensité des importations</div>
+                        <div class="stat-value text-danger" id="co2-intensite">--</div>
+                        <div class="stat-time">gCO₂eq/kWh · mix réel publié</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">CO₂ importé</div>
+                        <div class="stat-value text-warning" id="co2-importe">--</div>
+                        <div class="stat-time" id="co2-importe-mwh">--</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">CO₂ évité par les exports</div>
+                        <div class="stat-value text-success" id="co2-evite">--</div>
+                        <div class="stat-time" id="co2-evite-mwh">--</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Bilan net</div>
+                        <div class="stat-value text-primary" id="co2-net">--</div>
+                        <div class="stat-time" id="co2-equiv">--</div>
+                    </div></div>
+                </div>
+                <div class="card mb-3"><div style="padding:14px 16px; font-size:0.78rem; color:var(--text-secondary); line-height:1.6">
+                    <strong>Méthode.</strong> <span id="co2-methode">--</span>
+                </div></div>
                 <div class="tab-actions">
                     <button class="btn btn-light" onclick="refreshAnalysisTab()">🔄 Actualiser</button>
                     <button class="btn btn-success" onclick="exportCSV('analysis')">📥 Export CSV Analyse</button>
@@ -1236,6 +1263,7 @@ async function loadAnalysisTab() {
 
     // ── Échanges (section fusionnée dans cet onglet) ──
     if (store.exchange.length) renderExchangeCharts();
+    afficherBilanCarbone();
 
     // ── Synchronize demand & production on matching timestamps (sur toute la plage) ──
     const prodMap = new Map(store.production.map(r => [r.date, r]));
@@ -1322,6 +1350,151 @@ async function loadAnalysisTab() {
             }
         }
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  BILAN CARBONE DES ÉCHANGES
+//
+//  Le jeu « importations-exportations-avec-transits » d'Hydro-Québec publie,
+//  pour chaque voisin, la COMPOSITION PAR SOURCE de l'électricité importée
+//  (importations_sources_<zone>_{gas,nuclear,hydro,wind,unknown}). Le côté
+//  importations est donc calculé sur un mix réel, sans hypothèse : c'est de la
+//  comptabilité fondée sur la consommation, au sens d'Electricity Maps.
+//
+//  Le côté exportations, lui, REPOSE SUR UNE HYPOTHÈSE et doit être lu comme
+//  tel. Un mégawattheure exporté déplace l'unité marginale du marché receveur,
+//  qui est du gaz la grande majorité des heures en Ontario, en Nouvelle-
+//  Angleterre et dans l'État de New York — mais HQ ne publie évidemment pas ce
+//  qu'il déplace. On applique donc un facteur marginal unique, affiché en clair
+//  sous les cartes pour que le lecteur sache ce qu'il regarde.
+//
+//  Nuance méthodologique qui change tout : pour une question de déplacement on
+//  utilise le facteur MARGINAL, pas l'intensité MOYENNE du réseau receveur.
+//  L'Ontario affiche une moyenne très basse grâce à son nucléaire et à son
+//  hydraulique, mais ce n'est pas le nucléaire qu'on éteint quand le Québec
+//  exporte — c'est une turbine à gaz.
+//
+//  Conventions de signe du jeu, vérifiées sur un enregistrement réel :
+//  exportations_<zone> négatif = le Québec IMPORTE de cette zone, et
+//  importations_sources_<zone>_total en donne alors le volume positif.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Médianes du cycle de vie, GIEC AR5 annexe III, en gCO₂eq/kWh.
+const FE_SOURCE = { gas: 490, nuclear: 12, hydro: 24, wind: 11, solar: 48 };
+
+// Facteur marginal supposé du marché receveur : une turbine à gaz à cycle
+// combiné. À réviser si une source plus fine devient disponible.
+const FE_MARGINAL_EXPORT = 490;
+
+const ZONES_ECHANGE = [
+    { cle: 'ontario',       nom: 'Ontario' },
+    { cle: 'newyork',       nom: 'New York' },
+    { cle: 'newengland',    nom: 'Nouvelle-Angleterre' },
+    { cle: 'newbrunswick',  nom: 'Nouveau-Brunswick' }
+];
+
+// L'API écrit « unknow » pour l'Ontario et « unknown » pour les autres zones.
+// Chercher une seule orthographe laisserait silencieusement tomber des données.
+function partInconnue(r, zone) {
+    const a = r[`importations_sources_${zone}_unknown`];
+    const b = r[`importations_sources_${zone}_unknow`];
+    return (Number.isFinite(a) ? a : 0) + (Number.isFinite(b) ? b : 0);
+}
+
+// Pas de temps médian de la série, en heures — plus robuste qu'une constante.
+function pasHeures(rows) {
+    if (rows.length < 2) return 1;
+    const ecarts = [];
+    for (let i = 1; i < rows.length; i++) {
+        const d = (Date.parse(rows[i].date) - Date.parse(rows[i - 1].date)) / 36e5;
+        if (d > 0 && d < 24) ecarts.push(d);
+    }
+    if (!ecarts.length) return 1;
+    ecarts.sort((a, b) => a - b);
+    return ecarts[ecarts.length >> 1];
+}
+
+function bilanCarboneEchanges(rows) {
+    if (!rows.length) return null;
+    const dt = pasHeures(rows);
+
+    let mwhImporte = 0, gImporte = 0, mwhInconnu = 0, mwhExporte = 0;
+
+    rows.forEach(r => {
+        ZONES_ECHANGE.forEach(({ cle }) => {
+            // ── Importations : mix réel publié par HQ ──
+            Object.entries(FE_SOURCE).forEach(([src, fe]) => {
+                const mw = r[`importations_sources_${cle}_${src}`];
+                if (Number.isFinite(mw) && mw > 0) {
+                    mwhImporte += mw * dt;
+                    gImporte   += mw * dt * 1000 * fe;
+                }
+            });
+            // La part « inconnue » est comptée au facteur du gaz : c'est
+            // l'hypothèse prudente pour une émission importée. Sa part est
+            // affichée pour que le lecteur juge du poids de ce choix.
+            const inc = partInconnue(r, cle);
+            if (inc > 0) {
+                mwhImporte += inc * dt;
+                mwhInconnu += inc * dt;
+                gImporte   += inc * dt * 1000 * FE_SOURCE.gas;
+            }
+
+            // ── Exportations : seules les valeurs positives ──
+            const ex = r[`exportations_${cle}`];
+            if (Number.isFinite(ex) && ex > 0) mwhExporte += ex * dt;
+        });
+    });
+
+    // MWh × 1000 = kWh, × gCO₂/kWh = grammes, / 1e6 = tonnes. Oublier le ×1000
+    // divisait les émissions évitées par mille.
+    const tImporte = gImporte / 1e6;
+    const tEvite   = mwhExporte * 1000 * FE_MARGINAL_EXPORT / 1e6;
+    return {
+        dt, mwhImporte, mwhExporte, mwhInconnu,
+        intensite: mwhImporte > 0 ? gImporte / (mwhImporte * 1000) : null,
+        tImporte, tEvite, tNet: tEvite - tImporte
+    };
+}
+
+function afficherBilanCarbone() {
+    const b = bilanCarboneEchanges(store.exchange);
+    const methode = document.getElementById('co2-methode');
+    if (!b) {
+        if (methode) methode.textContent = 'En attente des données d\'échanges.';
+        return;
+    }
+
+    const t = n => Math.round(n).toLocaleString('fr-CA');
+    const mwh = n => Math.round(n).toLocaleString('fr-CA') + ' MWh';
+
+    set('co2-intensite', b.intensite === null ? 'n/d' : Math.round(b.intensite));
+    set('co2-importe', b.tImporte >= 1 ? `${t(b.tImporte)} t` : '~0 t');
+    set('co2-importe-mwh', mwh(b.mwhImporte) + ' importés');
+    set('co2-evite', b.tEvite >= 1 ? `${t(b.tEvite)} t` : '~0 t');
+    set('co2-evite-mwh', mwh(b.mwhExporte) + ' exportés');
+    set('co2-net', `${b.tNet >= 0 ? '+' : '−'}${t(Math.abs(b.tNet))} t`);
+
+    // Équivalence voiture : ~220 gCO₂/km pour une essence moyenne au Canada.
+    const km = Math.abs(b.tNet) * 1e6 / 220;
+    set('co2-equiv', b.tNet >= 0
+        ? `évité, soit ~${t(km / 1000)} 000 km en essence`
+        : `émis, soit ~${t(km / 1000)} 000 km en essence`);
+
+    const partInc = b.mwhImporte > 0 ? (b.mwhInconnu / b.mwhImporte * 100) : 0;
+    if (methode) {
+        methode.innerHTML =
+            `Importations calculées sur le <strong>mix réel publié par Hydro-Québec</strong> `
+            + `(facteurs de cycle de vie GIEC AR5 : gaz ${FE_SOURCE.gas}, nucléaire ${FE_SOURCE.nuclear}, `
+            + `hydraulique ${FE_SOURCE.hydro}, éolien ${FE_SOURCE.wind} gCO₂eq/kWh). `
+            + (partInc > 0.5 ? `Part de source non identifiée, comptée au facteur du gaz : ${partInc.toFixed(1)} %. ` : '')
+            + `— Exportations : <strong>hypothèse</strong> d'un déplacement de gaz à cycle combiné `
+            + `à ${FE_MARGINAL_EXPORT} gCO₂eq/kWh. C'est le facteur <em>marginal</em> du marché receveur, `
+            + `et non son intensité moyenne : quand le Québec exporte, ce n'est pas le nucléaire ontarien `
+            + `qu'on éteint, c'est une turbine à gaz. `
+            + `Fenêtre : ${rangeLabel(store.exchange) || 'n/d'}, pas de ${(b.dt * 60).toFixed(0)} min.`;
+    }
+    log(`🌍 Bilan carbone : ${t(b.tImporte)} t importées · ${t(b.tEvite)} t évitées · net ${t(b.tNet)} t`);
 }
 
 // Bouton « Actualiser » de l'onglet Analyse HQ : refetch des échanges puis recalcul complet
