@@ -2268,20 +2268,6 @@ async function showPlantChart(plantId) {
             pointBackgroundColor: colors[i % colors.length]
         }));
 
-        // Plant total as bold dashed line
-        const plantTotals = histData.data.map(s => s.plants?.[plantId]?.total || s[plantId] || 0);
-        datasets.push({
-            label: 'Total centrale',
-            data: plantTotals,
-            borderColor: '#d4a234',
-            backgroundColor: 'transparent',
-            borderWidth: 3,
-            borderDash: [5, 5],
-            tension: 0.25,
-            pointRadius: 0,
-            pointHoverRadius: 5
-        });
-
         wrap.innerHTML = `<div class="plant-chart-container"><canvas id="plantHourlyChart"></canvas></div>`;
         document.getElementById('plantModalSource').textContent = `${realCount} h réelles IESO + ${fallbackCount} h estimation · résolution 30 min`;
 
@@ -2314,8 +2300,6 @@ async function showPlantChart(plantId) {
 
     modal.show();
 }
-
-// Legacy: keep for compatibility
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CSV EXPORT
