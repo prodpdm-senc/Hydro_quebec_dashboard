@@ -119,6 +119,8 @@
             transition: background 0.2s;
         }
         .debug-toggle:hover { background: rgba(74,127,165,0.25); }
+        /* Section heading inside a tab — sits on the page gradient, not on a card */
+        .section-title { color: var(--text-light); font-weight: 600; font-size: 1.05rem; margin: 28px 0 14px; }
         /* Action buttons */
         .tab-actions { text-align: center; margin-top: 10px; display: flex; justify-content: center; gap: 10px; }
         /* Period selector */
@@ -405,11 +407,10 @@
         <ul class="nav nav-pills justify-content-center mb-3" id="mainTabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-canada"     id="btn-canada">🇨🇦 Canada</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-demand"     id="btn-demand">💧 Hydro-Québec</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-ontario"   id="btn-ontario">⚡ Ontario</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"   id="btn-nuclear">☢ Nucléaire</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-reservoirs"  id="btn-reservoirs">🏞 Réservoirs</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-exchange"   id="btn-exchange">🔄 Échanges HQ</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-reservoirs" id="btn-reservoirs">🏞 Réservoirs et Débit</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-analysis"   id="btn-analysis">📊 Analyse HQ</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-ontario"    id="btn-ontario">⚡ Ontario</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"    id="btn-nuclear">☢ Nucléaire</button></li>
         </ul>
 
         <!-- PERIOD SELECTOR -->
@@ -511,45 +512,11 @@
             </div>
 
 
-            <!-- ══════════════════════════════ ÉCHANGES ══════════════════════════════ -->
-            <div class="tab-pane fade" id="tab-exchange">
+            <!-- ══════════════════════════════ ANALYSE HQ (+ ÉCHANGES) ══════════════════════════════ -->
+            <div class="tab-pane fade" id="tab-analysis">
                 <div id="corsNote" class="alert alert-warning" style="display:none">
                     ⚠️ Les données d'échanges peuvent être bloquées par CORS selon votre réseau.
                 </div>
-                <div class="row g-3 mb-3">
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Flux net</div>
-                        <div class="stat-value text-primary" id="e-net">--</div>
-                        <div class="stat-time" id="e-net-time">--</div>
-                    </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">New England</div>
-                        <div class="stat-value text-success" id="e-ne">--</div>
-                        <div class="stat-time">MW</div>
-                    </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">New York</div>
-                        <div class="stat-value text-info" id="e-ny">--</div>
-                        <div class="stat-time">MW</div>
-                    </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Ontario</div>
-                        <div class="stat-value text-warning" id="e-on">--</div>
-                        <div class="stat-time">MW</div>
-                    </div></div>
-                </div>
-                <div class="card"><div class="chart-container">
-                    <h6 class="mb-2">Échanges nets (24h) — vert = export, orange = import</h6>
-                    <canvas id="exchangeChart"></canvas>
-                </div></div>
-                <div class="tab-actions">
-                    <button class="btn btn-light" onclick="loadExchangeTabWithHistory()">🔄 Actualiser</button>
-                    <button class="btn btn-success" onclick="exportCSV('exchange')">📥 Export CSV</button>
-                </div>
-            </div>
-
-            <!-- ══════════════════════════════ ANALYSE ══════════════════════════════ -->
-            <div class="tab-pane fade" id="tab-analysis">
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Ratio Prod / Demande</div>
@@ -586,9 +553,38 @@
                     <h6 class="mb-2">Bilan énergétique — vert = surplus, rouge = déficit</h6>
                     <canvas id="balanceChart"></canvas>
                 </div></div>
+
+                <h5 class="section-title">🔄 Échanges avec les réseaux voisins</h5>
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Flux net</div>
+                        <div class="stat-value text-primary" id="e-net">--</div>
+                        <div class="stat-time" id="e-net-time">--</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">New England</div>
+                        <div class="stat-value text-success" id="e-ne">--</div>
+                        <div class="stat-time">MW</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">New York</div>
+                        <div class="stat-value text-info" id="e-ny">--</div>
+                        <div class="stat-time">MW</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Ontario</div>
+                        <div class="stat-value text-warning" id="e-on">--</div>
+                        <div class="stat-time">MW</div>
+                    </div></div>
+                </div>
+                <div class="card"><div class="chart-container">
+                    <h6 class="mb-2">Échanges nets (24h) — vert = export, orange = import</h6>
+                    <canvas id="exchangeChart"></canvas>
+                </div></div>
                 <div class="tab-actions">
-                    <button class="btn btn-light" onclick="loadAnalysisTab()">🔄 Actualiser</button>
-                    <button class="btn btn-success" onclick="exportCSV('analysis')">📥 Export CSV</button>
+                    <button class="btn btn-light" onclick="refreshAnalysisTab()">🔄 Actualiser</button>
+                    <button class="btn btn-success" onclick="exportCSV('analysis')">📥 Export CSV Analyse</button>
+                    <button class="btn btn-success" onclick="exportCSV('exchange')">📥 Export CSV Échanges</button>
                 </div>
             </div>
 
@@ -1217,10 +1213,15 @@ function renderExchangeCharts() {
 async function loadAnalysisTab() {
     log('🔄 Chargement Analyse');
 
-    // Ensure base data is loaded first
-    if (!store.demand.length || !store.production.length) {
-        await Promise.all([loadDemandTabWithHistory(), loadProductionTabWithHistory(), loadExchangeTabWithHistory()]);
-    }
+    // Ensure base data is loaded first (exchange is part of this tab since the merge)
+    const pending = [];
+    if (!store.demand.length)     pending.push(loadDemandTabWithHistory());
+    if (!store.production.length) pending.push(loadProductionTabWithHistory());
+    if (!store.exchange.length)   pending.push(loadExchangeTabWithHistory());
+    if (pending.length) await Promise.all(pending);
+
+    // ── Échanges (section fusionnée dans cet onglet) ──
+    if (store.exchange.length) renderExchangeCharts();
 
     // ── Synchronize demand & production on matching timestamps (from period-sliced data) ──
     const demSlice  = sliceByPeriod(store.demand);
@@ -1310,6 +1311,12 @@ async function loadAnalysisTab() {
             }
         }
     );
+}
+
+// Bouton « Actualiser » de l'onglet Analyse HQ : refetch des échanges puis recalcul complet
+async function refreshAnalysisTab() {
+    await loadExchangeTabWithHistory();
+    await loadAnalysisTab();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2472,7 +2479,6 @@ document.querySelectorAll('.period-btn').forEach(btn => {
         // Re-render the currently active tab
         const active = document.querySelector('.nav-link.active')?.id;
         if      (active === 'btn-demand')     { if(store.production.length) renderProductionCharts(); }
-        else if (active === 'btn-exchange')   { if(store.exchange.length)   renderExchangeCharts(); }
         else if (active === 'btn-analysis')   { if(store.demand.length && store.production.length) loadAnalysisTab(); }
     });
 });
@@ -2481,7 +2487,6 @@ document.querySelectorAll('.period-btn').forEach(btn => {
 //  TAB SWITCHING — lazy load
 // ─────────────────────────────────────────────────────────────────────────────
 document.getElementById('btn-demand').addEventListener('shown.bs.tab',     () => { if(!store.production.length) loadProductionTabWithHistory(); });
-document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () => { if(!store.exchange.length)   loadExchangeTabWithHistory(); });
 document.getElementById('btn-analysis').addEventListener('shown.bs.tab',   () => { loadAnalysisTab(); });
 document.getElementById('btn-canada').addEventListener('shown.bs.tab',     () => { loadCanadaTab(); });
 document.getElementById('btn-reservoirs').addEventListener('shown.bs.tab', () => { loadReservoirsData(); });
@@ -2856,8 +2861,7 @@ document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () =>
 setInterval(() => {
     const active = document.querySelector('.nav-link.active')?.id;
     if (active === 'btn-demand')          loadProductionTabWithHistory();
-    else if (active === 'btn-exchange')   loadExchangeTabWithHistory();
-    else if (active === 'btn-analysis')   loadAnalysisTab();
+    else if (active === 'btn-analysis')   refreshAnalysisTab();
     else if (active === 'btn-canada')     loadCanadaTab();
     else if (active === 'btn-nuclear')    loadNuclearTab();
     else if (active === 'btn-ontario')    loadOntarioTab();
