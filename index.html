@@ -525,35 +525,36 @@
                         <div class="stat-time" id="r-trend-time">--</div>
                     </div></div>
                 </div>
-                <div class="card"><div class="chart-container">
-                    <h6 class="mb-2" id="chartTitle">Niveaux d'eau réservoirs (24h)</h6>
-                    <canvas id="reservoirsChart"></canvas>
+                <div class="card mb-3"><div style="padding:16px">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label for="r-region" class="form-label mb-1" style="font-size:0.85rem">Région</label>
+                            <select id="r-region" class="form-select"></select>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="r-region-summary" style="font-size:0.85rem; color:var(--text-secondary)"></div>
+                        </div>
+                    </div>
                 </div></div>
 
-                <div class="card"><div class="chart-container">
-                    <h6 class="mb-2" id="turbineChartTitle">Débit turbiné (24h)</h6>
-                    <canvas id="turbineChart"></canvas>
-                </div></div>
+                <div class="row g-3 mb-3" id="centraleCharts"></div>
 
-                <div class="row g-3 mb-3">
-                    <div class="col-lg-6"><div class="card">
-                        <div style="padding: 16px;">
-                            <h6 class="mb-3">⚡ Débit turbiné par centrale <small class="text-muted">(cliquez)</small></h6>
-                            <div class="production-grid" id="turbinedFlowGrid"></div>
-                        </div>
-                    </div></div>
-                    <div class="col-lg-6"><div class="card">
-                        <div style="padding: 16px;">
-                            <h6 class="mb-3">💧 Niveaux des réservoirs <small class="text-muted">(cliquez)</small></h6>
-                            <div class="production-grid" id="allReservoirsGrid"></div>
-                        </div>
-                    </div></div>
-                </div>
+                <div class="card mb-3"><div style="padding:16px">
+                    <label for="r-reservoir" class="form-label mb-1" style="font-size:0.85rem">
+                        Niveau d'un réservoir <small class="text-muted">(consultation à la pièce)</small>
+                    </label>
+                    <select id="r-reservoir" class="form-select mb-2"></select>
+                    <div id="r-reservoir-summary" style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px"></div>
+                    <div class="chart-container-sm" style="height:300px; padding:0 0 30px">
+                        <canvas id="reservoirsChart"></canvas>
+                    </div>
+                </div></div>
 
                 <div class="tab-actions">
                     <button class="btn btn-light" onclick="loadReservoirsData()">🔄 Actualiser</button>
                 </div>
             </div>
+
 
             <!-- ══════════════════════════════ ÉCHANGES ══════════════════════════════ -->
             <div class="tab-pane fade" id="tab-exchange">
@@ -2583,57 +2584,68 @@ document.getElementById('btn-reservoirs').addEventListener('shown.bs.tab', () =>
 // ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 //  RÉSERVOIRS & DÉBIT TURBINÉ
-//  L'API ODS d'Hydro-Québec renvoie access-control-allow-origin: *, donc on
-//  peut l'appeler directement depuis GitHub Pages. En local on passe par le
-//  proxy, qui ajoute le cache et la persistance 7 jours.
+//  Le débit turbiné approxime la puissance instantanée d'une centrale : en
+//  juxtaposant les 6 plus grosses centrales d'une région, on voit comment
+//  Hydro-Québec répartit la production entre ses ouvrages.
+//
+//  L'API ODS renvoie access-control-allow-origin:*, donc on l'appelle
+//  directement depuis GitHub Pages ; en local on passe par le proxy, qui
+//  ajoute le cache et la persistance 7 jours.
 // ─────────────────────────────────────────────────────────────────────────────
 const ODS = 'https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets';
-
-const HYDRO_SOURCES = {
-    niveaux: {
-        proxy: 'http://localhost:3001/api/hydro-quebec/reservoirs',
-        direct: `${ODS}/donnees-hydrometeorologiques/exports/json?lang=fr`
-              + `&select=nom,regionqc,date,valeur,composition_depil_nom_unite_mesure`
-              + `&where=${encodeURIComponent('composition_depil_type_point_donnee="Niveau" AND date > \'' + hydroDaysAgo(7) + '\'')}`,
-        normalize: r => ({ nom: r.nom, date: r.date, valeur: parseFloat(r.valeur), unite: r.composition_depil_nom_unite_mesure || 'm' })
-    },
-    turbine: {
-        proxy: 'http://localhost:3001/api/hydro-quebec/turbined-flow',
-        direct: `${ODS}/donnees-hydrometriques/exports/json?lang=fr`
-              + `&select=nom,regionqc,depil_json_type_point_donnee,depil_json_nom_unite_mesure,split_date,split_value`
-              + `&where=${encodeURIComponent('depil_json_type_point_donnee LIKE "Débit turbiné"')}`,
-        // split_date arrive en "2026/09/11T16:00:00Z" : non parsable tel quel.
-        normalize: r => ({ nom: r.nom, date: String(r.split_date || '').replace(/\//g, '-'), valeur: parseFloat(r.split_value), unite: r.depil_json_nom_unite_mesure || 'm³/s' })
-    }
-};
 
 function hydroDaysAgo(days) {
     return new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
 }
 
+const HYDRO_SOURCES = {
+    niveaux: {
+        proxy: 'http://localhost:3001/api/hydro-quebec/reservoirs',
+        direct: () => `${ODS}/donnees-hydrometeorologiques/exports/json?lang=fr`
+            + `&select=nom,regionqc,date,valeur,composition_depil_nom_unite_mesure`
+            + `&where=${encodeURIComponent(`composition_depil_type_point_donnee="Niveau" AND date > '${hydroDaysAgo(7)}'`)}`,
+        normalize: r => ({
+            nom: r.nom, regionqc: r.regionqc, date: r.date,
+            valeur: parseFloat(r.valeur), unite: r.composition_depil_nom_unite_mesure || 'm'
+        })
+    },
+    turbine: {
+        proxy: 'http://localhost:3001/api/hydro-quebec/turbined-flow',
+        direct: () => `${ODS}/donnees-hydrometriques/exports/json?lang=fr`
+            + `&select=nom,regionqc,depil_json_type_point_donnee,depil_json_nom_unite_mesure,split_date,split_value`
+            + `&where=${encodeURIComponent('depil_json_type_point_donnee LIKE "Débit turbiné"')}`,
+        // split_date arrive en "2026/09/11T16:00:00Z", que Date ne parse pas.
+        normalize: r => ({
+            nom: r.nom, regionqc: r.regionqc,
+            date: String(r.split_date || '').replace(/\//g, '-'),
+            valeur: parseFloat(r.split_value), unite: r.depil_json_nom_unite_mesure || 'm³/s'
+        })
+    }
+};
+
 async function hydroFetch(kind) {
     const src = HYDRO_SOURCES[kind];
-    const res = await corsGet(isLocalhost ? src.proxy : src.direct);
+    const res = await corsGet(isLocalhost ? src.proxy : src.direct());
     const raw = await res.json();
     if (!Array.isArray(raw)) throw new Error(raw && raw.message ? raw.message : 'Réponse inattendue');
 
-    // Le proxy renvoie déjà des enregistrements normalisés.
-    const rows = isLocalhost ? raw : raw.map(src.normalize);
+    const rows = isLocalhost ? raw : raw.map(src.normalize); // le proxy normalise déjà
     return rows
         .filter(r => r.nom && r.date && Number.isFinite(r.valeur))
         .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
-function groupByName(rows) {
+const CENTRALE_SLOTS = 6;
+let hydroData = { parRegion: {}, niveaux: {} };
+
+function groupBy(rows, key) {
     const out = {};
-    rows.forEach(r => (out[r.nom] ||= []).push(r));
+    rows.forEach(r => (out[r[key]] ||= []).push(r));
     return out;
 }
 
-let reservoirState = { niveaux: {}, turbine: {} };
-
 async function loadReservoirsData() {
-    log('🏞 Chargement Réservoirs + débits turbinés');
+    log('🏞 Chargement débits turbinés + niveaux');
     const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
 
     try {
@@ -2642,106 +2654,162 @@ async function loadReservoirsData() {
             hydroFetch('turbine')
         ]);
 
-        const niveaux = groupByName(niveauxRows);
-        const turbine = groupByName(turbineRows);
-        reservoirState = { niveaux, turbine };
+        // Régions -> centrales -> série horaire
+        const parRegion = {};
+        Object.entries(groupBy(turbineRows, 'regionqc')).forEach(([region, rows]) => {
+            parRegion[region] = Object.entries(groupBy(rows, 'nom'))
+                .map(([nom, series]) => ({ nom, series, actuel: series[series.length - 1].valeur }))
+                .sort((a, b) => b.actuel - a.actuel);
+        });
 
-        // Dernière valeur connue par centrale : somme = débit turbiné total.
-        const latestPerCentrale = Object.entries(turbine)
-            .map(([nom, rows]) => ({ nom, ...rows[rows.length - 1] }))
-            .sort((a, b) => b.valeur - a.valeur);
+        hydroData = { parRegion, niveaux: groupBy(niveauxRows, 'nom') };
 
-        const totalFlow = latestPerCentrale.reduce((sum, c) => sum + c.valeur, 0);
-        const actives = latestPerCentrale.filter(c => c.valeur > 0).length;
-        const lastDate = turbineRows.length ? turbineRows[turbineRows.length - 1].date : null;
+        const centrales = Object.values(parRegion).flat();
+        const total = centrales.reduce((s, c) => s + c.actuel, 0);
+        const actives = centrales.filter(c => c.actuel > 0).length;
+        const derniere = turbineRows.length ? new Date(turbineRows[turbineRows.length - 1].date) : null;
 
-        setText('r-flow', Math.round(totalFlow).toLocaleString('fr-CA'));
-        setText('r-level', `${actives} / ${latestPerCentrale.length}`);
+        setText('r-flow', Math.round(total).toLocaleString('fr-CA'));
+        setText('r-level', `${actives} / ${centrales.length}`);
         setText('r-level-time', 'centrales qui turbinent');
-        setText('r-count', Object.keys(niveaux).length);
-        setText('r-trend', lastDate ? new Date(lastDate).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' }) : '--');
-        setText('r-trend-time', lastDate ? new Date(lastDate).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }) : '--');
+        setText('r-count', Object.keys(hydroData.niveaux).length);
+        setText('r-trend', derniere ? derniere.toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' }) : '--');
+        setText('r-trend-time', derniere ? derniere.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }) : '--');
 
-        renderCentraleGrid(latestPerCentrale);
-        renderReservoirGrid(niveaux);
+        remplirSelecteurRegions(parRegion);
+        remplirSelecteurReservoirs(niveauxRows);
 
-        // Vue par défaut : la centrale qui turbine le plus.
-        if (latestPerCentrale.length) selectCentrale(latestPerCentrale[0].nom);
-
-        log(`✅ ${latestPerCentrale.length} centrales · ${Object.keys(niveaux).length} réservoirs`);
+        log(`✅ ${centrales.length} centrales · ${Object.keys(hydroData.niveaux).length} réservoirs`);
     } catch (err) {
         log('❌ Erreur réservoirs: ' + err.message);
         setText('r-flow', '❌');
-        setText('r-level', '--');
-        const grid = document.getElementById('turbinedFlowGrid');
-        if (grid) grid.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+        const grid = document.getElementById('centraleCharts');
+        if (grid) grid.innerHTML = `<div class="col-12"><div class="alert alert-danger">${err.message}</div></div>`;
     }
 }
 
-function renderCentraleGrid(latestPerCentrale) {
-    const grid = document.getElementById('turbinedFlowGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
+function remplirSelecteurRegions(parRegion) {
+    const sel = document.getElementById('r-region');
+    if (!sel) return;
 
-    latestPerCentrale.forEach(c => {
-        const turbining = c.valeur > 0;
-        const card = document.createElement('div');
-        card.className = 'production-card card';
-        card.style.cursor = 'pointer';
-        card.innerHTML = `
-            <div class="production-label">${c.nom}</div>
-            <div class="production-value">${Math.round(c.valeur).toLocaleString('fr-CA')} <small>m³/s</small></div>
-            <div class="production-percent" style="color:${turbining ? '#27ae60' : '#95a5a6'}">
-                ${turbining ? '⚡ turbine' : '⏸ arrêt'}
-            </div>`;
-        card.addEventListener('click', () => selectCentrale(c.nom));
-        grid.appendChild(card);
+    // Régions les plus productrices en premier.
+    const regions = Object.entries(parRegion)
+        .map(([region, cs]) => ({ region, total: cs.reduce((s, c) => s + c.actuel, 0), n: cs.length }))
+        .sort((a, b) => b.total - a.total);
+
+    sel.innerHTML = regions
+        .map(r => `<option value="${r.region}">${r.region} — ${r.n} centrale${r.n > 1 ? 's' : ''}, ${Math.round(r.total).toLocaleString('fr-CA')} m³/s</option>`)
+        .join('');
+
+    sel.onchange = () => afficherRegion(sel.value);
+    if (regions.length) afficherRegion(regions[0].region);
+}
+
+function afficherRegion(region) {
+    const grid = document.getElementById('centraleCharts');
+    if (!grid) return;
+
+    const toutes = hydroData.parRegion[region] || [];
+    const top = toutes.slice(0, CENTRALE_SLOTS);
+
+    const reste = toutes.length - top.length;
+    const resume = document.getElementById('r-region-summary');
+    if (resume) {
+        resume.textContent = reste > 0
+            ? `${CENTRALE_SLOTS} plus grosses centrales affichées · ${reste} autre${reste > 1 ? 's' : ''} non affichée${reste > 1 ? 's' : ''}`
+            : `${toutes.length} centrale${toutes.length > 1 ? 's' : ''} dans cette région`;
+    }
+
+    // Les Chart.js sont indexés par id de canvas : il faut détruire TOUS les
+    // slots avant de refaire le DOM, y compris ceux qu'une région plus petite
+    // n'utilisera pas — sinon un chart survit en pointant sur un canvas retiré
+    // et le slot reste blanc au retour sur une région plus grande.
+    for (let i = 0; i < CENTRALE_SLOTS; i++) window.chartManager?.destroy(`centraleChart${i}`);
+    grid.innerHTML = top.map((c, i) => `
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="card" style="padding:12px">
+                <div style="font-size:0.8rem; color:var(--text-secondary)">${c.nom}</div>
+                <div style="font-size:1.15rem; font-weight:600; color:${c.actuel > 0 ? '#27ae60' : '#95a5a6'}">
+                    ${Math.round(c.actuel).toLocaleString('fr-CA')} <small style="font-weight:400">m³/s</small>
+                </div>
+                <div style="position:relative; height:120px; margin-top:4px">
+                    <canvas id="centraleChart${i}"></canvas>
+                </div>
+            </div>
+        </div>`).join('');
+
+    top.forEach((c, i) => petitGraphique(`centraleChart${i}`, c.series, '#e74c3c'));
+}
+
+// Graphique compact : on lit la forme de la courbe, pas les valeurs exactes.
+function petitGraphique(canvasId, series, couleur) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.chartManager) return;
+
+    const pts = series.slice(-168); // 7 jours horaires
+    window.chartManager.createOrUpdate(canvas, 'line', {
+        labels: pts.map(r => new Date(r.date).toLocaleString('fr-CA', { month: 'numeric', day: 'numeric', hour: '2-digit' })),
+        datasets: [{
+            data: pts.map(r => r.valeur),
+            borderColor: couleur,
+            backgroundColor: couleur + '22',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.25,
+            fill: true
+        }]
+    }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 },
+        plugins: { legend: { display: false }, tooltip: { intersect: false, mode: 'index' } },
+        scales: {
+            y: { beginAtZero: true, ticks: { color: 'var(--text-secondary)', font: { size: 9 }, maxTicksLimit: 4 }, grid: { display: false } },
+            x: { ticks: { color: 'var(--text-secondary)', font: { size: 8 }, maxTicksLimit: 4, maxRotation: 0 }, grid: { display: false } }
+        }
     });
 }
 
-function renderReservoirGrid(niveaux) {
-    const grid = document.getElementById('allReservoirsGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
+function remplirSelecteurReservoirs(niveauxRows) {
+    const sel = document.getElementById('r-reservoir');
+    if (!sel) return;
 
-    Object.entries(niveaux)
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .forEach(([nom, rows]) => {
-            const last = rows[rows.length - 1];
-            const delta = rows.length > 1 ? last.valeur - rows[0].valeur : 0;
-            const color = delta > 0 ? '#27ae60' : delta < 0 ? '#e74c3c' : '#95a5a6';
+    const parRegion = groupBy(niveauxRows, 'regionqc');
+    sel.innerHTML = Object.keys(parRegion).sort().map(region => {
+        const noms = [...new Set(parRegion[region].map(r => r.nom))].sort();
+        return `<optgroup label="${region}">`
+            + noms.map(n => `<option value="${n}">${n}</option>`).join('')
+            + `</optgroup>`;
+    }).join('');
 
-            const card = document.createElement('div');
-            card.className = 'production-card card';
-            card.style.cursor = 'pointer';
-            card.innerHTML = `
-                <div class="production-label">${nom}</div>
-                <div class="production-value">${last.valeur.toFixed(2)} <small>m</small></div>
-                <div class="production-percent" style="color:${color}">
-                    ${delta > 0 ? '+' : ''}${delta.toFixed(2)} m / 7 j
-                </div>`;
-            card.addEventListener('click', () => selectReservoir(nom));
-            grid.appendChild(card);
-        });
+    sel.onchange = () => afficherReservoir(sel.value);
+    if (sel.value) afficherReservoir(sel.value);
 }
 
-function hydroLineChart(canvasId, titleId, title, rows, label, color) {
-    const canvas = document.getElementById(canvasId);
-    const heading = document.getElementById(titleId);
-    if (heading) heading.textContent = title;
-    if (!canvas || !window.chartManager) return;
+function afficherReservoir(nom) {
+    const series = hydroData.niveaux[nom] || [];
+    const canvas = document.getElementById('reservoirsChart');
+    if (!canvas || !window.chartManager || !series.length) return;
 
-    const pts = rows.slice(-336); // 14 jours de données horaires
+    const dernier = series[series.length - 1];
+    const delta = series.length > 1 ? dernier.valeur - series[0].valeur : 0;
+    const resume = document.getElementById('r-reservoir-summary');
+    if (resume) {
+        const signe = delta > 0 ? '+' : '';
+        resume.textContent = `${dernier.valeur.toFixed(2)} m · ${signe}${delta.toFixed(2)} m sur 7 jours`
+            + ` · relevé du ${new Date(dernier.date).toLocaleString('fr-CA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+    }
+
     window.chartManager.createOrUpdate(canvas, 'line', {
-        labels: pts.map(r => new Date(r.date).toLocaleString('fr-CA', { month: 'short', day: 'numeric', hour: '2-digit' })),
+        labels: series.map(r => new Date(r.date).toLocaleString('fr-CA', { month: 'short', day: 'numeric', hour: '2-digit' })),
         datasets: [{
-            label,
-            data: pts.map(r => r.valeur),
-            borderColor: color,
-            backgroundColor: color + '20',
-            tension: 0.3,
-            pointRadius: 0,
+            label: 'm',
+            data: series.map(r => r.valeur),
+            borderColor: '#3498db',
+            backgroundColor: '#3498db20',
             borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.3,
             fill: true
         }]
     }, {
@@ -2750,32 +2818,9 @@ function hydroLineChart(canvasId, titleId, title, rows, label, color) {
         plugins: { legend: { display: false } },
         scales: {
             y: { beginAtZero: false, ticks: { color: 'var(--text-primary)' } },
-            x: { ticks: { color: 'var(--text-primary)', maxTicksLimit: 12 } }
+            x: { ticks: { color: 'var(--text-primary)', maxTicksLimit: 10, maxRotation: 0 } }
         }
     });
-}
-
-// Une centrale : son débit turbiné + le niveau du réservoir associé s'il existe.
-function selectCentrale(nom) {
-    const rows = reservoirState.turbine[nom] || [];
-    hydroLineChart('turbineChart', 'turbineChartTitle',
-        `Débit turbiné — ${nom}`, rows, 'm³/s', '#e74c3c');
-
-    const match = Object.keys(reservoirState.niveaux)
-        .find(n => n === nom || n.startsWith(nom + ' '));
-    if (match) {
-        selectReservoir(match, false);
-    } else {
-        hydroLineChart('reservoirsChart', 'chartTitle',
-            'Niveau d\'eau — sélectionnez un réservoir', [], 'm', '#3498db');
-    }
-}
-
-function selectReservoir(nom, scroll = true) {
-    const rows = reservoirState.niveaux[nom] || [];
-    hydroLineChart('reservoirsChart', 'chartTitle',
-        `Niveau d'eau — ${nom}`, rows, 'm', '#3498db');
-    if (scroll) document.getElementById('reservoirsChart')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
