@@ -548,6 +548,29 @@
                     <canvas id="balanceChart"></canvas>
                 </div></div>
 
+                <h5 class="section-title">🌡 Sensibilité thermique de la demande</h5>
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-4"><div class="card stat-card">
+                        <div class="stat-label">Sensibilité</div>
+                        <div class="stat-value text-primary" id="th-pente">--</div>
+                        <div class="stat-time">MW par °C sous le seuil</div>
+                    </div></div>
+                    <div class="col-6 col-md-4"><div class="card stat-card">
+                        <div class="stat-label">Température d'équilibre</div>
+                        <div class="stat-value text-info" id="th-seuil">--</div>
+                        <div class="stat-time">seuil de chauffage</div>
+                    </div></div>
+                    <div class="col-12 col-md-4"><div class="card stat-card">
+                        <div class="stat-label">Qualité de l'ajustement</div>
+                        <div class="stat-value text-success" id="th-r2">--</div>
+                        <div class="stat-time" id="th-n">--</div>
+                    </div></div>
+                </div>
+                <div class="card"><div class="chart-container">
+                    <h6 class="mb-2">Demande horaire selon la température <span id="th-note" style="font-weight:400; font-size:0.8rem; color:var(--text-secondary)"></span></h6>
+                    <canvas id="thermoChart"></canvas>
+                </div></div>
+
                 <h5 class="section-title">🔄 Échanges avec les réseaux voisins</h5>
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
@@ -1265,6 +1288,10 @@ async function loadAnalysisTab() {
     if (store.exchange.length) renderExchangeCharts();
     afficherBilanCarbone();
 
+    // Dépend d'une API tierce : détachée pour qu'un échec météo n'emporte pas
+    // le reste de l'onglet avec lui.
+    analyserSensibiliteThermique();
+
     // ── Synchronize demand & production on matching timestamps (sur toute la plage) ──
     const prodMap = new Map(store.production.map(r => [r.date, r]));
     const synced  = store.demand
@@ -1495,6 +1522,234 @@ function afficherBilanCarbone() {
             + `Fenêtre : ${rangeLabel(store.exchange) || 'n/d'}, pas de ${(b.dt * 60).toFixed(0)} min.`;
     }
     log(`🌍 Bilan carbone : ${t(b.tImporte)} t importées · ${t(b.tEvite)} t évitées · net ${t(b.tNet)} t`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SENSIBILITÉ THERMIQUE DE LA DEMANDE
+//
+//  Le Québec est un réseau à pointe HIVERNALE : le chauffage électrique fait
+//  monter la demande quasi linéairement quand il fait froid, sous un seuil dit
+//  « température d'équilibre ». La pente de cette droite, en MW/°C, est la
+//  métrique que tout gestionnaire de réseau nordique suit — c'est elle qui
+//  permet de prévoir la pointe à partir d'une prévision météo.
+//
+//  Modèle : demande = a + b × max(0, Tseuil − T), soit la forme « degrés-jours
+//  de chauffage ». Tseuil n'est pas imposé : on balaie les valeurs candidates
+//  et on retient celle qui maximise le R². Au-dessus du seuil le modèle prédit
+//  une demande plate, ce qui est l'hypothèse raisonnable ici — la climatisation
+//  québécoise est trop marginale pour créer une branche estivale nette.
+//
+//  Température pondérée par la population : une moyenne des quatre principales
+//  régions métropolitaines, parce que la demande suit le froid là où vivent les
+//  gens, pas le froid moyen du territoire.
+//
+//  Limite actuelle : la régression porte sur les 7 jours du store, soit une
+//  plage de températures étroite. En septembre elle peut très bien ne rien
+//  trouver de significatif, et c'est le comportement correct — le R² le dira.
+//  L'historisation du dépôt (data/hq/daily-summary.json) permettra d'élargir à
+//  plusieurs mois et de rendre l'estimation vraiment robuste.
+// ─────────────────────────────────────────────────────────────────────────────
+const VILLES_METEO = [
+    // Poids approximatifs des régions métropolitaines de recensement.
+    { nom: 'Montréal',        lat: 45.51, lon: -73.59, poids: 0.62 },
+    { nom: 'Québec',          lat: 46.81, lon: -71.21, poids: 0.18 },
+    { nom: 'Gatineau',        lat: 45.48, lon: -75.70, poids: 0.11 },
+    { nom: 'Sherbrooke',      lat: 45.40, lon: -71.89, poids: 0.09 }
+];
+
+// Open-Meteo : gratuit, sans clé. timezone=America/Montreal renvoie des
+// horodatages locaux naïfs, exactement la forme des dates de l'API HQ.
+function urlMeteo() {
+    return 'https://api.open-meteo.com/v1/forecast'
+        + `?latitude=${VILLES_METEO.map(v => v.lat).join(',')}`
+        + `&longitude=${VILLES_METEO.map(v => v.lon).join(',')}`
+        + '&hourly=temperature_2m&past_days=7&forecast_days=1'
+        + '&timezone=America%2FMontreal';
+}
+
+// Renvoie une Map "AAAA-MM-JJTHH" -> température pondérée.
+async function chargerTemperatures() {
+    const res = await corsGet(urlMeteo());
+    const brut = await res.json();
+    // Multi-localisation renvoie un tableau ; une seule renvoie un objet.
+    const lieux = Array.isArray(brut) ? brut : [brut];
+
+    const somme = new Map(), poids = new Map();
+    lieux.forEach((lieu, i) => {
+        const h = lieu && lieu.hourly;
+        if (!h || !Array.isArray(h.time) || !Array.isArray(h.temperature_2m)) return;
+        const p = VILLES_METEO[i]?.poids ?? 1;
+        h.time.forEach((t, k) => {
+            const temp = h.temperature_2m[k];
+            if (!Number.isFinite(temp)) return;
+            const cle = String(t).slice(0, 13);          // AAAA-MM-JJTHH
+            somme.set(cle, (somme.get(cle) || 0) + temp * p);
+            poids.set(cle, (poids.get(cle) || 0) + p);
+        });
+    });
+
+    const out = new Map();
+    somme.forEach((v, cle) => out.set(cle, v / poids.get(cle)));
+    return out;
+}
+
+// Moyenne horaire de la demande, indexée comme les températures.
+function demandeParHeure() {
+    const cumul = new Map();
+    store.demand.forEach(r => {
+        const mw = r.valeurs?.demandeTotal;
+        if (!Number.isFinite(mw)) return;
+        const cle = String(r.date).slice(0, 13);
+        const e = cumul.get(cle) || { s: 0, n: 0 };
+        e.s += mw; e.n += 1;
+        cumul.set(cle, e);
+    });
+    const out = new Map();
+    cumul.forEach((e, cle) => out.set(cle, e.s / e.n));
+    return out;
+}
+
+// Moindres carrés de y sur x, avec R².
+function ajuster(xs, ys) {
+    const n = xs.length;
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < n; i++) {
+        sxy += (xs[i] - mx) * (ys[i] - my);
+        sxx += (xs[i] - mx) ** 2;
+        syy += (ys[i] - my) ** 2;
+    }
+    if (sxx === 0 || syy === 0) return null;
+    const b = sxy / sxx;
+    return { b, a: my - b * mx, r2: (sxy * sxy) / (sxx * syy) };
+}
+
+// Balayage du seuil : on garde celui qui explique le mieux la demande.
+function regressionThermique(paires) {
+    if (paires.length < 24) return null;
+    const temps = paires.map(p => p.t);
+    const tmin = Math.min(...temps), tmax = Math.max(...temps);
+    if (tmax - tmin < 4) return null;        // plage trop étroite pour conclure
+
+    let best = null;
+    for (let seuil = 8; seuil <= 20.001; seuil += 0.5) {
+        const xs = paires.map(p => Math.max(0, seuil - p.t));
+        if (xs.filter(x => x > 0).length < paires.length * 0.25) continue;
+        const f = ajuster(xs, paires.map(p => p.mw));
+        if (f && f.b > 0 && (!best || f.r2 > best.r2)) best = { ...f, seuil };
+    }
+    if (!best) return null;
+
+    // Le seuil n'est identifiable que si l'on a observé des heures AU-DESSUS.
+    // Sans elles, le modèle est purement linéaire sur la plage vue : tous les
+    // seuils ≥ tmax donnent exactement le même ajustement, et en retenir un
+    // reviendrait à afficher un chiffre tiré au sort. La pente, elle, reste
+    // valide — c'est la même droite.
+    const auDessus = paires.filter(p => p.t > best.seuil).length;
+    return { ...best, n: paires.length, tmin, tmax,
+             seuilIdentifiable: auDessus >= Math.max(3, paires.length * 0.05) };
+}
+
+async function analyserSensibiliteThermique() {
+    const note = document.getElementById('th-note');
+    const dire = (txt) => { if (note) note.textContent = txt; };
+
+    if (!store.demand.length) { dire('— en attente des données de demande'); return; }
+
+    let temps;
+    try {
+        temps = await chargerTemperatures();
+    } catch (err) {
+        log(`⚠️ Météo indisponible : ${err.message}`, true);
+        dire('— météo indisponible');
+        return;
+    }
+
+    const dem = demandeParHeure();
+    const paires = [];
+    dem.forEach((mw, cle) => {
+        const t = temps.get(cle);
+        if (Number.isFinite(t)) paires.push({ t, mw });
+    });
+
+    if (paires.length < 24) {
+        dire(`— ${paires.length} heure(s) appariée(s), trop peu pour une régression`);
+        log(`⚠️ Sensibilité thermique : ${paires.length} heures appariées seulement`, true);
+        return;
+    }
+
+    const fit = regressionThermique(paires);
+    const plage = `${Math.min(...paires.map(p => p.t)).toFixed(0)} à ${Math.max(...paires.map(p => p.t)).toFixed(0)} °C`;
+
+    if (!fit) {
+        set('th-pente', 'n/d'); set('th-seuil', 'n/d'); set('th-r2', 'n/d');
+        set('th-n', `${paires.length} h · ${plage}`);
+        dire(`— plage de températures trop étroite (${plage}) pour dégager une pente`);
+        tracerNuageThermique(paires, null);
+        return;
+    }
+
+    set('th-pente', `${Math.round(fit.b).toLocaleString('fr-CA')}`);
+    set('th-seuil', fit.seuilIdentifiable ? `${fit.seuil.toFixed(1)} °C` : `> ${fit.tmax.toFixed(0)} °C`);
+    set('th-r2', fit.r2.toFixed(2));
+    set('th-n', `${fit.n} h · ${plage}`);
+    dire(fit.seuilIdentifiable
+        ? `— ${fit.n} heures, température pondérée par la population`
+        : `— ${fit.n} heures ; aucune heure observée au-dessus du seuil, donc seule la pente est établie`);
+    log(`🌡 Sensibilité : ${Math.round(fit.b)} MW/°C · seuil `
+        + `${fit.seuilIdentifiable ? fit.seuil.toFixed(1) + ' °C' : 'non identifiable (> ' + fit.tmax.toFixed(0) + ' °C)'}`
+        + ` (R²=${fit.r2.toFixed(2)}, ${fit.n} h)`);
+    tracerNuageThermique(paires, fit);
+}
+
+function tracerNuageThermique(paires, fit) {
+    const canvas = document.getElementById('thermoChart');
+    if (!canvas) return;
+    const { text, grid } = chartColors();
+
+    const datasets = [{
+        type: 'scatter',
+        label: 'Heures observées',
+        data: paires.map(p => ({ x: p.t, y: p.mw })),
+        backgroundColor: 'rgba(42,111,168,0.55)',
+        borderColor: '#2a6fa8',
+        pointRadius: 3
+    }];
+
+    if (fit) {
+        const tmin = Math.min(...paires.map(p => p.t));
+        const tmax = Math.max(...paires.map(p => p.t));
+        const modele = t => fit.a + fit.b * Math.max(0, fit.seuil - t);
+        // Le point d'inflexion n'est tracé que s'il tombe dans la plage observée.
+        const pts = [{ x: tmin, y: modele(tmin) }];
+        if (fit.seuilIdentifiable && fit.seuil > tmin && fit.seuil < tmax) pts.push({ x: fit.seuil, y: modele(fit.seuil) });
+        pts.push({ x: tmax, y: modele(tmax) });
+        datasets.push({
+            type: 'line', label: `Modèle · ${Math.round(fit.b)} MW/°C`,
+            data: pts, borderColor: '#c47a2e', borderWidth: 2.5,
+            pointRadius: 0, fill: false
+        });
+    }
+
+    destroyChart('thermoChart');
+    charts['thermoChart'] = new Chart(canvas.getContext('2d'), {
+        data: { datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { color: text, font: { size: 11 }, boxWidth: 16 } },
+                tooltip: { callbacks: { label: c => `${c.parsed.x.toFixed(1)} °C · ${Math.round(c.parsed.y).toLocaleString('fr-CA')} MW` } }
+            },
+            scales: {
+                x: { type: 'linear', title: { display: true, text: 'Température pondérée (°C)', color: text, font: { size: 11 } },
+                     grid: { color: grid }, ticks: { color: text, font: { size: 11 } } },
+                y: { grid: { color: grid },
+                     ticks: { color: text, callback: v => v.toLocaleString('fr-CA') + ' MW', font: { size: 11 } } }
+            },
+            layout: { padding: { bottom: 10 } }
+        }
+    });
 }
 
 // Bouton « Actualiser » de l'onglet Analyse HQ : refetch des échanges puis recalcul complet
