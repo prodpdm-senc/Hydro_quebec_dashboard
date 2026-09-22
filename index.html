@@ -2602,37 +2602,52 @@ const HYDRO_SOURCES = {
     niveaux: {
         proxy: 'http://localhost:3001/api/hydro-quebec/reservoirs',
         direct: () => `${ODS}/donnees-hydrometeorologiques/exports/json?lang=fr`
-            + `&select=nom,regionqc,date,valeur,composition_depil_nom_unite_mesure`
-            + `&where=${encodeURIComponent(`composition_depil_type_point_donnee="Niveau" AND date > '${hydroDaysAgo(7)}'`)}`,
-        normalize: r => ({
-            nom: r.nom, regionqc: r.regionqc, date: r.date,
-            valeur: parseFloat(r.valeur), unite: r.composition_depil_nom_unite_mesure || 'm'
-        })
+            + `&select=nom,regionqc,date,valeur,composition_depil_type_point_donnee,composition_depil_nom_unite_mesure`
+            + `&where=${encodeURIComponent(`composition_depil_type_point_donnee="Niveau" AND date > '${hydroDaysAgo(7)}'`)}`
     },
     turbine: {
         proxy: 'http://localhost:3001/api/hydro-quebec/turbined-flow',
         direct: () => `${ODS}/donnees-hydrometriques/exports/json?lang=fr`
             + `&select=nom,regionqc,depil_json_type_point_donnee,depil_json_nom_unite_mesure,split_date,split_value`
-            + `&where=${encodeURIComponent('depil_json_type_point_donnee LIKE "Débit turbiné"')}`,
-        // split_date arrive en "2026/09/11T16:00:00Z", que Date ne parse pas.
-        normalize: r => ({
-            nom: r.nom, regionqc: r.regionqc,
-            date: String(r.split_date || '').replace(/\//g, '-'),
-            valeur: parseFloat(r.split_value), unite: r.depil_json_nom_unite_mesure || 'm³/s'
-        })
+            + `&where=${encodeURIComponent('depil_json_type_point_donnee LIKE "Débit turbiné"')}`
     }
 };
+
+// Une seule normalisation pour les trois formes possibles : la sortie du proxy,
+// et les deux conventions de champs des jeux ODS bruts (hydrometriques utilise
+// split_date/split_value, hydrometeorologiques date/valeur). Deux fonctions
+// séparées avaient fini par diverger : celle du client avait perdu `type`, ce
+// qui regroupait toutes les centrales d'une région sous une clé undefined.
+function normHydro(r) {
+    const brutDate = r.date ?? r.split_date;
+    return {
+        nom: r.nom,
+        regionqc: r.regionqc,
+        type: r.type ?? r.depil_json_type_point_donnee ?? r.composition_depil_type_point_donnee,
+        unite: r.unite ?? r.depil_json_nom_unite_mesure ?? r.composition_depil_nom_unite_mesure,
+        // split_date arrive en "2026/09/11T16:00:00Z", que Date ne parse pas.
+        date: typeof brutDate === 'string' ? brutDate.replace(/\//g, '-') : null,
+        valeur: parseFloat(r.valeur ?? r.split_value)
+    };
+}
 
 async function hydroFetch(kind) {
     const src = HYDRO_SOURCES[kind];
     const res = await corsGet(isLocalhost ? src.proxy : src.direct());
-    const raw = await res.json();
-    if (!Array.isArray(raw)) throw new Error(raw && raw.message ? raw.message : 'Réponse inattendue');
+    const brut = await res.json();
+    if (!Array.isArray(brut)) throw new Error(brut && brut.message ? brut.message : 'Réponse inattendue');
 
-    const rows = isLocalhost ? raw : raw.map(src.normalize); // le proxy normalise déjà
-    return rows
+    const rows = brut
+        .map(normHydro)
         .filter(r => r.nom && r.date && Number.isFinite(r.valeur))
         .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    // Le regroupement se fait sur `type` : sans lui tout s'effondre en une seule
+    // série, ce qui passe inaperçu à l'affichage. Mieux vaut échouer ici.
+    if (rows.length && !rows[0].type) {
+        throw new Error(`Champ "type" absent des données ${kind}`);
+    }
+    return rows;
 }
 
 // Puissance installée des centrales, en MW.
