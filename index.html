@@ -408,6 +408,7 @@
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-ontario"   id="btn-ontario">⚡ Ontario</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"   id="btn-nuclear">☢ Nucléaire</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-production" id="btn-production">🔋 Production HQ</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-reservoirs"  id="btn-reservoirs">🏞 Réservoirs</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-exchange"   id="btn-exchange">🔄 Échanges HQ</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-analysis"   id="btn-analysis">📊 Analyse HQ</button></li>
         </ul>
@@ -498,6 +499,11 @@
                     <button class="btn btn-light" onclick="loadProductionTabWithHistory()">🔄 Actualiser</button>
                     <button class="btn btn-success" onclick="exportCSV('production')">📥 Export CSV</button>
                 </div>
+            </div>
+
+            <!-- ══════════════════════════════ RÉSERVOIRS ══════════════════════════════ -->
+            <div class="tab-pane fade" id="tab-reservoirs">
+                <!-- Content loaded by reservoirs-tab.js -->
             </div>
 
             <!-- ══════════════════════════════ ÉCHANGES ══════════════════════════════ -->
@@ -748,6 +754,16 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Core utilities and state -->
+<script src="js/utils/dom-helpers.js"></script>
+<script src="js/utils/formatters.js"></script>
+<script src="js/state.js"></script>
+<script src="js/api.js"></script>
+<script src="js/chart-manager.js"></script>
+
+<!-- Tab components -->
+<script src="js/components/reservoirs-tab.js"></script>
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
 //  STATE
@@ -2513,6 +2529,7 @@ document.getElementById('btn-production').addEventListener('shown.bs.tab', () =>
 document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () => { if(!store.exchange.length)   loadExchangeTabWithHistory(); });
 document.getElementById('btn-analysis').addEventListener('shown.bs.tab',   () => { loadAnalysisTab(); });
 document.getElementById('btn-canada').addEventListener('shown.bs.tab',     () => { loadCanadaTab(); });
+document.getElementById('btn-reservoirs').addEventListener('shown.bs.tab', () => { loadReservoirsTab(); });
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
 document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () => { loadOntarioTab(); });
 

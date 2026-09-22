@@ -16,6 +16,13 @@ async function loadExchangeTab() {
     const fields = latest.fields || latest; // Latest can be object directly or have fields property
     const timestamp = fields.date || new Date().toISOString();
 
+    // Ontario data in HQ exchange feed is often ~2 hours delayed.
+    // Only include Ontario partner when we consider the data "complete".
+    const recordDate = new Date(timestamp);
+    const ageMinutes = (Date.now() - recordDate.getTime()) / (1000 * 60);
+    const ONTARIO_MAX_AGE_MINUTES = 90; // Adjust as needed (user wants to see it only when fresh)
+    const ontarioDataFresh = ageMinutes <= ONTARIO_MAX_AGE_MINUTES;
+
     store.setState('exchange', data);
     store.clearError('exchange');
 
@@ -56,6 +63,11 @@ async function loadExchangeTab() {
     const partners = parseExchangePartners(fields);
 
     Object.entries(partners).forEach(([partner, { imports, exports }]) => {
+      // Skip Ontario if its data in the HQ feed is considered stale (often ~2h late)
+      if (partner === 'Ontario' && !ontarioDataFresh) {
+        return;
+      }
+
       const net = exports - imports;
       const card = createElement('div', { class: 'card exchange-partner-card' }, [
         createElement('div', { class: 'exchange-partner-name' }, [partner]),
@@ -76,6 +88,17 @@ async function loadExchangeTab() {
       ]);
       partnersContainer.appendChild(card);
     });
+
+    // Optional note when Ontario is hidden due to delay
+    if (partners['Ontario'] && !ontarioDataFresh) {
+      const note = createElement('div', { 
+        class: 'text-muted small mt-2', 
+        style: 'font-size: 0.8rem; opacity: 0.7;' 
+      }, [
+        '⚠️ Données Ontario en retard (environ 2h). Masquées jusqu\'à mise à jour complète.'
+      ]);
+      partnersContainer.appendChild(note);
+    }
 
     tabEl.appendChild(importCard);
     tabEl.appendChild(exportCard);
