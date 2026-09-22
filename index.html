@@ -149,38 +149,6 @@
         .tab-actions .btn-success:active {
             background: #d96f12; border-color: #d96f12; color: var(--hq-navy);
         }
-        /* Period selector */
-        .period-bar {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 18px;
-        }
-        .period-bar span {
-            color: rgba(255,255,255,0.8);
-            font-size: 0.85rem;
-            font-weight: 600;
-            margin-right: 4px;
-        }
-        .period-btn {
-            background: rgba(255,255,255,0.18);
-            border: 1px solid rgba(255,255,255,0.35);
-            color: #fff;
-            padding: 5px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 600;
-            transition: all 0.2s ease;
-        }
-        .period-btn:hover { background: rgba(255,255,255,0.3); }
-        .period-btn.active {
-            background: #fff;
-            color: var(--hq-blue);
-            border-color: #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        }
         /* Province grid */
         .province-grid {
             display: grid;
@@ -323,9 +291,6 @@
             #mainTabs .nav-link:hover { transform: none; }
 
             /* Period bar */
-            .period-bar { gap: 5px; margin-bottom: 12px; }
-            .period-bar span { font-size: 0.78rem; }
-            .period-btn { padding: 4px 11px; font-size: 0.78rem; }
 
             /* Cards */
             .card { margin-bottom: 12px; border-radius: 10px; }
@@ -438,14 +403,6 @@
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"    id="btn-nuclear">☢ Nucléaire</button></li>
         </ul>
 
-        <!-- PERIOD SELECTOR -->
-        <div class="period-bar" id="periodBar">
-            <span>Période :</span>
-            <button class="period-btn active" data-hours="24">24h</button>
-            <button class="period-btn"        data-hours="48">48h</button>
-            <button class="period-btn"        data-hours="168">7 jours</button>
-        </div>
-
         <div class="tab-content">
 
             <!-- ══════════════════════════════ HYDRO-QUÉBEC (PRODUCTION) ══════════════════════════════ -->
@@ -473,7 +430,7 @@
                     </div></div>
                 </div>
                 <div class="card"><div class="chart-container">
-                    <h6 class="mb-2">Mix de production par source (24h)</h6>
+                    <h6 class="mb-2">Mix de production par source <span id="rng-prod">(plage complète)</span></h6>
                     <canvas id="productionChart"></canvas>
                 </div></div>
                 <div class="tab-actions">
@@ -559,14 +516,14 @@
                         <div class="stat-time">% de la production</div>
                     </div></div>
                     <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Flux net moyen (24h)</div>
+                        <div class="stat-label">Flux net moyen <span id="rng-flow">(plage complète)</span></div>
                         <div class="stat-value text-warning" id="a-avg-flow">--</div>
                         <div class="stat-time">MW</div>
                     </div></div>
                 </div>
                 <div class="row g-3 mb-3">
                     <div class="col-lg-6"><div class="card"><div class="chart-container-sm">
-                        <h6 class="mb-2">Production vs Demande (24h)</h6>
+                        <h6 class="mb-2">Production vs Demande <span id="rng-pvd">(plage complète)</span></h6>
                         <canvas id="pvdChart"></canvas>
                     </div></div></div>
                     <div class="col-lg-6"><div class="card"><div class="chart-container-sm">
@@ -603,7 +560,7 @@
                     </div></div>
                 </div>
                 <div class="card"><div class="chart-container">
-                    <h6 class="mb-2">Échanges nets (24h) — vert = export, orange = import</h6>
+                    <h6 class="mb-2">Échanges nets <span id="rng-exch">(plage complète)</span> — vert = export, orange = import</h6>
                     <canvas id="exchangeChart"></canvas>
                 </div></div>
                 <div class="tab-actions">
@@ -845,32 +802,50 @@ async function corsGet(url, opts = {}) {
 
 let charts = {};
 let store = { demand: [], production: [], exchange: [], syncedDemand: [], syncedProduction: [] };
-let currentPeriod = 24; // hours
-
 // ─────────────────────────────────────────────────────────────────────────────
-//  PERIOD HELPERS
+//  PLAGE AFFICHÉE
+//  Plus de sélecteur : on affiche toujours tout ce que le store contient, soit
+//  la fenêtre glissante de 7 jours de StorageManager (672 pts à 15 min). Les
+//  étiquettes et les titres s'adaptent donc à l'étendue réelle des données,
+//  qui part de quelques heures sur un premier chargement et grandit ensuite.
 // ─────────────────────────────────────────────────────────────────────────────
-function sliceByPeriod(arr) {
-    const pts = currentPeriod * 4; // 15-min intervals
-    return arr.slice(-pts);
+function spanHours(arr) {
+    if (!arr || arr.length < 2) return 0;
+    return (new Date(arr[arr.length-1].date) - new Date(arr[0].date)) / 36e5;
 }
 
-function xLabel(dateStr) {
+function xLabel(dateStr, span = 24) {
     const d = new Date(dateStr);
-    if (currentPeriod <= 24) {
+    if (span <= 24) {
         return d.toLocaleString('fr-CA', { hour:'2-digit', minute:'2-digit' });
     }
-    if (currentPeriod <= 48) {
+    if (span <= 48) {
         return d.toLocaleString('fr-CA', { weekday:'short', hour:'2-digit', minute:'2-digit' });
     }
-    // 7 days — show date + hour so tick skipping gives 1 per day
+    // Au-delà de 48 h : date + heure, pour qu'un tick sauté donne un repère par jour
     return d.toLocaleString('fr-CA', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 
-function periodLabel() {
-    if (currentPeriod <= 24)  return '24h';
-    if (currentPeriod <= 48)  return '48h';
-    return '7 jours';
+// Étiquettes d'axe X calées sur l'étendue du jeu de données passé
+function spanLabels(arr) {
+    const span = spanHours(arr);
+    return arr.map(r => xLabel(r.date, span));
+}
+
+// « (18 h) », « (7 jours) »… pour les titres de graphiques
+function rangeLabel(arr) {
+    const h = spanHours(arr);
+    if (!h) return '';
+    if (h < 1)  return `${Math.round(h * 60)} min`;   // sinon un premier chargement afficherait « 0 h »
+    if (h < 36) return `${Math.round(h)} h`;
+    return `${Math.round(h / 24)} jours`;
+}
+
+function setRange(id, arr) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const l = rangeLabel(arr);
+    el.textContent = l ? `(${l})` : '';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1057,10 +1032,11 @@ async function loadProductionTabWithHistory() {
 }
 
 function renderProductionCharts() {
-    const recent = sliceByPeriod(store.production);
+    const recent = store.production;
     if (!recent.length) return;
 
-    const labels = recent.map(r => xLabel(r.date));
+    setRange('rng-prod', recent);
+    const labels = spanLabels(recent);
 
     const datasets = [
         {
@@ -1191,10 +1167,11 @@ async function loadExchangeTabWithHistory() {
 }
 
 function renderExchangeCharts() {
-    const disp = sliceByPeriod(store.exchange);
+    const disp = store.exchange;
     if (!disp.length) return;
 
-    const labels = disp.map(r => xLabel(r.date));
+    setRange('rng-exch', disp);
+    const labels = spanLabels(disp);
     const { text, grid } = chartColors();
 
     // Stacked area: Ontario, New York, New England, New Brunswick
@@ -1248,11 +1225,9 @@ async function loadAnalysisTab() {
     // ── Échanges (section fusionnée dans cet onglet) ──
     if (store.exchange.length) renderExchangeCharts();
 
-    // ── Synchronize demand & production on matching timestamps (from period-sliced data) ──
-    const demSlice  = sliceByPeriod(store.demand);
-    const prodSlice = sliceByPeriod(store.production);
-    const prodMap = new Map(prodSlice.map(r => [r.date, r]));
-    const synced  = demSlice
+    // ── Synchronize demand & production on matching timestamps (sur toute la plage) ──
+    const prodMap = new Map(store.production.map(r => [r.date, r]));
+    const synced  = store.demand
         .filter(r => prodMap.has(r.date))
         .map(r => ({ demand: r, production: prodMap.get(r.date) }));
 
@@ -1261,7 +1236,7 @@ async function loadAnalysisTab() {
     store.syncedDemand     = synced.map(s => s.demand);
     store.syncedProduction = synced.map(s => s.production);
 
-    log(`✅ Analyse: ${synced.length} pts synchronisés (${periodLabel()})`);
+    log(`✅ Analyse: ${synced.length} pts synchronisés (${rangeLabel(store.syncedDemand) || 'plage partielle'})`);
 
     // ── Stats ──
     const latestProd   = store.syncedProduction[store.syncedProduction.length-1].valeurs;
@@ -1273,13 +1248,14 @@ async function loadAnalysisTab() {
     set('a-wind-share',  ((latestProd.eolien||0)/totalProd*100).toFixed(1));
 
     if (store.exchange.length) {
-        const exchSlice = sliceByPeriod(store.exchange);
-        const avg = exchSlice.reduce((s,r)=>s+(r.exportations_total||0),0)/exchSlice.length;
+        const avg = store.exchange.reduce((s,r)=>s+(r.exportations_total||0),0)/store.exchange.length;
         set('a-avg-flow', Math.round(avg).toLocaleString('fr-CA') + (avg>=0?' (Exp)':' (Imp)'));
+        setRange('rng-flow', store.exchange);
     }
 
     // ── Charts ──
-    const labels  = store.syncedDemand.map(r => xLabel(r.date));
+    setRange('rng-pvd', store.syncedDemand);
+    const labels  = spanLabels(store.syncedDemand);
     const demVals = store.syncedDemand.map(r => r.valeurs.demandeTotal);
     const proVals = store.syncedProduction.map(r => {
         const v=r.valeurs; return (v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0);
@@ -2491,22 +2467,6 @@ function exportCSV(type) {
     a.click();
     log(`📥 Export CSV: ${type} (${rows.length} lignes)`);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  PERIOD BUTTONS
-// ─────────────────────────────────────────────────────────────────────────────
-document.querySelectorAll('.period-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentPeriod = parseInt(btn.dataset.hours, 10);
-
-        // Re-render the currently active tab
-        const active = document.querySelector('.nav-link.active')?.id;
-        if      (active === 'btn-demand')     { if(store.production.length) renderProductionCharts(); }
-        else if (active === 'btn-analysis')   { if(store.demand.length && store.production.length) loadAnalysisTab(); }
-    });
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TAB SWITCHING — lazy load
