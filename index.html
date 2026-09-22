@@ -8,25 +8,39 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <style>
+        /* Palette Hydro-Québec (hydroquebec.com/residentiel) :
+           bande marine, sections bleu pâle, cartes blanches, liens bleu vif,
+           accent orange. */
         :root {
-            --bg-gradient-1: #4a7fa5;
-            --bg-gradient-2: #1a2838;
+            --hq-navy: #1d1a6e;
+            --hq-pale: #e6f0fa;
+            --hq-blue: #1f35c4;
+            --hq-orange: #f5821f;
+
+            --bg-gradient-1: #2a2585;
+            --bg-gradient-2: #14114f;
             --card-bg: #ffffff;
-            --text-primary: #212529;
-            --text-secondary: #6c757d;
+            --text-primary: #1b1464;
+            --text-secondary: #5a5a6e;
             --text-light: #ffffff;
-            --border-color: rgba(0,0,0,0.1);
+            --border-color: rgba(29,26,110,0.14);
             --debug-bg: rgba(255,255,255,0.95);
+            --pill-bg: var(--hq-pale);
+            --pill-text: var(--hq-navy);
+            --pill-active-text: var(--hq-blue);
         }
         [data-theme="dark"] {
-            --bg-gradient-1: #1a1a2e;
-            --bg-gradient-2: #16213e;
-            --card-bg: #2d3748;
-            --text-primary: #f7fafc;
-            --text-secondary: #a0aec0;
+            --bg-gradient-1: #161340;
+            --bg-gradient-2: #0b0930;
+            --card-bg: #211e55;
+            --text-primary: #eef2fb;
+            --text-secondary: #a5aacb;
             --text-light: #f7fafc;
-            --border-color: rgba(255,255,255,0.1);
-            --debug-bg: rgba(45,55,72,0.95);
+            --border-color: rgba(255,255,255,0.12);
+            --debug-bg: rgba(33,30,85,0.95);
+            --pill-bg: rgba(255,255,255,0.88);
+            --pill-text: var(--hq-navy);
+            --pill-active-text: var(--hq-blue);
         }
         body {
             background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
@@ -77,8 +91,8 @@
         .loading { text-align: center; color: var(--text-light); font-size: 1.4rem; padding: 50px; }
         /* Nav tabs */
         .nav-pills .nav-link {
-            background: rgba(255,255,255,0.85);
-            color: #4a7fa5;
+            background: var(--pill-bg);
+            color: var(--pill-text);
             font-weight: 600;
             margin: 0 4px;
             border-radius: 10px;
@@ -87,7 +101,7 @@
         .nav-pills .nav-link:hover { background: #fff; transform: translateY(-2px); }
         .nav-pills .nav-link.active {
             background: #fff;
-            color: #4a7fa5;
+            color: var(--pill-active-text);
             box-shadow: 0 4px 14px rgba(0,0,0,0.18);
         }
         /* Debug box */
@@ -109,8 +123,8 @@
         .debug-toggle {
             position: absolute;
             right: 8px; top: 8px;
-            background: rgba(74,127,165,0.12);
-            border: 1px solid rgba(74,127,165,0.3);
+            background: rgba(31,53,196,0.10);
+            border: 1px solid rgba(31,53,196,0.28);
             color: var(--text-primary);
             padding: 4px 10px;
             border-radius: 6px;
@@ -118,11 +132,23 @@
             font-size: 0.78rem;
             transition: background 0.2s;
         }
-        .debug-toggle:hover { background: rgba(74,127,165,0.25); }
+        .debug-toggle:hover { background: rgba(31,53,196,0.22); }
         /* Section heading inside a tab — sits on the page gradient, not on a card */
         .section-title { color: var(--text-light); font-weight: 600; font-size: 1.05rem; margin: 28px 0 14px; }
         /* Action buttons */
         .tab-actions { text-align: center; margin-top: 10px; display: flex; justify-content: center; gap: 10px; }
+        .tab-actions .btn-light { color: var(--hq-navy); font-weight: 600; border: none; }
+        .tab-actions .btn-light:hover { background: var(--hq-pale); color: var(--hq-blue); }
+        /* Bootstrap btn-success est vert : la charte HQ n'a pas de vert, on passe à l'orange d'accent */
+        .tab-actions .btn-success,
+        .tab-actions .btn-success:disabled {
+            background: var(--hq-orange); border-color: var(--hq-orange); color: var(--hq-navy); font-weight: 700;
+        }
+        .tab-actions .btn-success:hover,
+        .tab-actions .btn-success:focus,
+        .tab-actions .btn-success:active {
+            background: #d96f12; border-color: #d96f12; color: var(--hq-navy);
+        }
         /* Period selector */
         .period-bar {
             display: flex;
@@ -151,7 +177,7 @@
         .period-btn:hover { background: rgba(255,255,255,0.3); }
         .period-btn.active {
             background: #fff;
-            color: #4a7fa5;
+            color: var(--hq-blue);
             border-color: #fff;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
@@ -900,7 +926,7 @@ themeBtn.addEventListener('click', () => {
 
 function chartColors() {
     const dark = html.getAttribute('data-theme') === 'dark';
-    return { text: dark ? '#f7fafc' : '#374151', grid: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' };
+    return { text: dark ? '#eef2fb' : '#4c4c66', grid: dark ? 'rgba(255,255,255,0.10)' : 'rgba(29,26,110,0.10)' };
 }
 
 function refreshChartThemes() {
