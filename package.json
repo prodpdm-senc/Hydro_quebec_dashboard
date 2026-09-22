@@ -19,7 +19,6 @@
   },
   "homepage": "https://github.com/prodpdm-senc/Hydro_quebec_dashboard#readme",
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "node-fetch": "^3.3.2"

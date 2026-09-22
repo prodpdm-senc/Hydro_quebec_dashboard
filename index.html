@@ -503,7 +503,35 @@
 
             <!-- ══════════════════════════════ RÉSERVOIRS ══════════════════════════════ -->
             <div class="tab-pane fade" id="tab-reservoirs">
-                <!-- Content loaded by reservoirs-tab.js -->
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Niveau moyen réservoirs</div>
+                        <div class="stat-value text-primary" id="r-level">--</div>
+                        <div class="stat-time" id="r-level-time">--</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Débit turbiné total</div>
+                        <div class="stat-value text-info" id="r-flow">--</div>
+                        <div class="stat-time">m³/s</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Réservoirs suivi</div>
+                        <div class="stat-value text-success" id="r-count">--</div>
+                        <div class="stat-time">stations</div>
+                    </div></div>
+                    <div class="col-6 col-md-3"><div class="card stat-card">
+                        <div class="stat-label">Tendance</div>
+                        <div class="stat-value text-warning" id="r-trend">--</div>
+                        <div class="stat-time" id="r-trend-time">--</div>
+                    </div></div>
+                </div>
+                <div class="card"><div class="chart-container">
+                    <h6 class="mb-2">Niveaux d'eau réservoirs (24h)</h6>
+                    <canvas id="reservoirsChart"></canvas>
+                </div></div>
+                <div class="tab-actions">
+                    <button class="btn btn-light" onclick="loadReservoirsData()">🔄 Actualiser</button>
+                </div>
             </div>
 
             <!-- ══════════════════════════════ ÉCHANGES ══════════════════════════════ -->
@@ -761,9 +789,6 @@
 <script src="js/state.js"></script>
 <script src="js/api.js"></script>
 <script src="js/chart-manager.js"></script>
-
-<!-- Tab components -->
-<script src="js/components/reservoirs-tab.js"></script>
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
 //  STATE
@@ -2529,7 +2554,83 @@ document.getElementById('btn-production').addEventListener('shown.bs.tab', () =>
 document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () => { if(!store.exchange.length)   loadExchangeTabWithHistory(); });
 document.getElementById('btn-analysis').addEventListener('shown.bs.tab',   () => { loadAnalysisTab(); });
 document.getElementById('btn-canada').addEventListener('shown.bs.tab',     () => { loadCanadaTab(); });
-document.getElementById('btn-reservoirs').addEventListener('shown.bs.tab', () => { loadReservoirsTab(); });
+document.getElementById('btn-reservoirs').addEventListener('shown.bs.tab', () => { loadReservoirsData(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RÉSERVOIRS - Niveaux d'eau et débit turbiné
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadReservoirsData() {
+    log('🏞 Chargement Réservoirs');
+    try {
+        const res = await corsGet('http://localhost:3001/api/hydro-quebec/reservoirs');
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) throw new Error('Aucune donnée réservoir');
+
+        // Parse data by station
+        const byStation = {};
+        data.forEach(record => {
+            const station = record.nom || 'Unknown';
+            if (!byStation[station]) byStation[station] = [];
+            byStation[station].push({ date: record.date, value: parseFloat(record.valeur) || 0 });
+        });
+
+        // Calculate stats
+        const allValues = Object.values(byStation).flat().map(r => r.value).filter(v => v > 0);
+        const avgLevel = allValues.length > 0 ? (allValues.reduce((a, b) => a + b, 0) / allValues.length).toFixed(2) : '--';
+        const trend = allValues.length > 1 ? ((allValues[allValues.length - 1] - allValues[0]) * 100 / allValues[0]).toFixed(1) : '0';
+
+        // Fetch turbined flow
+        const flowRes = await corsGet('http://localhost:3001/api/hydro-quebec/turbined-flow');
+        const flowData = await flowRes.json();
+        const totalFlow = flowData.length > 0 ? (parseFloat(flowData[flowData.length - 1].valeur) || 0).toFixed(0) : '--';
+
+        // Update KPI display
+        document.getElementById('r-level').textContent = avgLevel + ' m';
+        document.getElementById('r-level-time').textContent = new Date().toLocaleTimeString('fr-CA');
+        document.getElementById('r-flow').textContent = totalFlow;
+        document.getElementById('r-count').textContent = Object.keys(byStation).length;
+        document.getElementById('r-trend').textContent = (trend > 0 ? '+' : '') + trend + '%';
+        document.getElementById('r-trend-time').textContent = trend > 0 ? '↑ hausse' : trend < 0 ? '↓ baisse' : '→ stable';
+
+        // Render chart (top 5 stations)
+        renderReservoirsChart(byStation);
+
+    } catch (err) {
+        log('❌ Erreur réservoirs: ' + err.message);
+        document.getElementById('r-level').textContent = '❌';
+    }
+}
+
+function renderReservoirsChart(byStation) {
+    const canvas = document.getElementById('reservoirsChart');
+    if (!canvas || !window.chartManager) return;
+
+    const stations = Object.keys(byStation).slice(0, 5);
+    const allDates = new Set();
+    stations.forEach(s => byStation[s].forEach(r => allDates.add(r.date)));
+    const dates = Array.from(allDates).sort().slice(-24); // Last 24 hours
+
+    const labels = dates.map(d => new Date(d).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
+    const colors = ['#3498db', '#2ecc71', '#f39c12', '#e74c3c', '#9b59b6'];
+
+    const datasets = stations.map((station, idx) => ({
+        label: station.substring(0, 15),
+        data: dates.map(d => {
+            const record = byStation[station].find(r => r.date === d);
+            return record ? record.value : null;
+        }),
+        borderColor: colors[idx],
+        backgroundColor: colors[idx] + '20',
+        tension: 0.3
+    }));
+
+    window.chartManager.createOrUpdate(canvas, 'line', { labels, datasets }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { ticks: { color: 'var(--text-primary)' } }, x: { ticks: { color: 'var(--text-primary)' } } }
+    });
+}
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
 document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () => { loadOntarioTab(); });
 
