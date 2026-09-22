@@ -1,0 +1,50 @@
+name: Update Hydro-Québec History
+
+# Le tableau de bord ne conserve que 7 jours dans le localStorage du visiteur.
+# Ce workflow archive les données ouvertes d'HQ dans le dépôt, ce qui rend
+# possibles les lectures saisonnières et pluriannuelles.
+#
+# Lancé depuis Actions, donc sans la contrainte CORS du navigateur.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/update_hq_history.py'
+      - '.github/workflows/update-hydro-quebec.yml'
+
+# Deux exécutions concurrentes se marcheraient dessus au moment du commit.
+concurrency:
+  group: hq-history
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Archive les données ouvertes Hydro-Québec
+        run: python3 scripts/update_hq_history.py
+
+      - name: Commit and push if data changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/hq/
+          git diff --staged --quiet && echo "No changes." || (
+            git commit -m "data: historique Hydro-Québec $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            # Une autre exécution (ou un workflow de données voisin) a pu pousser
+            # entre-temps : on rejoue par-dessus plutôt que d'échouer.
+            for i in 1 2 3; do
+              git push && exit 0
+              git pull --rebase origin main || exit 1
+            done
+            exit 1
+          )
