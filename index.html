@@ -2725,8 +2725,8 @@ function filterReservoirChart(station, byStation, flowData) {
     });
 
     // Turbined flow chart
-    const flowRecords = flowData || [];
-    const flowDates = flowRecords.map(r => r.date).slice(-24);
+    const flowRecords = Array.isArray(flowData) ? flowData : [];
+    const flowDates = flowRecords.length > 0 ? flowRecords.map(r => r.date || r.split_date).slice(-24) : [];
     const flowLabels = flowDates.map(d => new Date(d).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
 
     window.chartManager.createOrUpdate(turbineCanvas, 'line', {
