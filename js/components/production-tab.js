@@ -71,8 +71,6 @@ function renderProductionChart(data) {
     return date.toLocaleDateString('fr-CA', { month: 'short', day: 'numeric' });
   });
 
-  console.log('[ProductionMix] Rendering stacked chart with sources:', sourceMap.map(s => s.label));
-
   // Extract sources for stacked mix (harmonized with Ontario "stacked shaded" style)
   // Map possible API field names to nice labels
   const sourceMap = [
@@ -82,6 +80,8 @@ function renderProductionChart(data) {
     { key: 'thermique',   label: 'Thermique',   color: { border: '#e53935', bg: 'rgba(229, 57, 53, 0.65)' } },
     { key: 'autres',      label: 'Autres',      color: { border: '#546e7a', bg: 'rgba(84, 110, 122, 0.6)' } }
   ];
+
+  console.log('[ProductionMix] Rendering stacked chart with sources:', sourceMap.map(s => s.label));
 
   // Order from bottom to top for nicer visual stacking (largest base first)
   const orderedSourceMap = [...sourceMap].reverse();

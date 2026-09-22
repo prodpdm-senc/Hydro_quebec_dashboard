@@ -95,7 +95,7 @@ async function loadExchangeTab() {
         class: 'text-muted small mt-2', 
         style: 'font-size: 0.8rem; opacity: 0.7;' 
       }, [
-        '⚠️ Données Ontario en retard (environ 2h). Masquées jusqu\'\u00e0 mise à jour complète.'
+        '⚠️ Données Ontario en retard (environ 2h). Masquées jusqu\'à mise à jour complète.'
       ]);
       partnersContainer.appendChild(note);
     }

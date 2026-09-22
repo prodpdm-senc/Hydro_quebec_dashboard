@@ -56,7 +56,7 @@ function cleanupOldFiles() {
     }
   }
   if (deleted > 0) {
-    console.log(`\ud83e\uddf9 Nettoyage 7j JSON : ${deleted} fichiers supprimés`);
+    console.log(`🧹 Nettoyage 7j JSON : ${deleted} fichiers supprimés`);
   }
 }
 
@@ -241,6 +241,72 @@ app.get('/api/hydro-quebec/exchange', async (req, res) => {
   }
 });
 
+app.get('/api/hydro-quebec/reservoirs', async (req, res) => {
+  const cacheKey = 'hydro-reservoirs';
+  const cached = getFromCache(cacheKey);
+  if (cached) {
+    logRequest('GET', '/api/hydro-quebec/reservoirs', 200, 0, true);
+    return res.setHeader('Content-Type', cached.contentType).send(cached.data);
+  }
+
+  try {
+    const start = Date.now();
+    const response = await fetch('https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/donnees-hydrometeorologiques/exports/json?lang=fr&limit=1000&where=composition_depil_type_point_donnee="Niveau"', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+      timeout: 10000
+    });
+    const data = await response.json();
+    const time = Date.now() - start;
+
+    logRequest('GET', '/api/hydro-quebec/reservoirs', response.status, time);
+
+    if (Array.isArray(data) && data.length > 0) {
+      const latest = data[data.length - 1];
+      const ts = latest.split_date || latest.date;
+      if (ts) appendRecord('reservoirs', ts, latest);
+    }
+
+    saveToCache(cacheKey, JSON.stringify(data), 'application/json');
+    res.json(data);
+  } catch (err) {
+    console.error('Erreur réservoirs:', err.message);
+    res.status(500).json({ error: 'Réservoirs indisponible', details: err.message });
+  }
+});
+
+app.get('/api/hydro-quebec/turbined-flow', async (req, res) => {
+  const cacheKey = 'hydro-turbined';
+  const cached = getFromCache(cacheKey);
+  if (cached) {
+    logRequest('GET', '/api/hydro-quebec/turbined-flow', 200, 0, true);
+    return res.setHeader('Content-Type', cached.contentType).send(cached.data);
+  }
+
+  try {
+    const start = Date.now();
+    const response = await fetch('https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/donnees-hydrometriques/exports/json?lang=fr&limit=1000&where=composition_depil_type_point_donnee="Débit total"', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+      timeout: 10000
+    });
+    const data = await response.json();
+    const time = Date.now() - start;
+
+    logRequest('GET', '/api/hydro-quebec/turbined-flow', response.status, time);
+
+    if (Array.isArray(data) && data.length > 0) {
+      const latest = data[data.length - 1];
+      const ts = latest.split_date || latest.date;
+      if (ts) appendRecord('turbined', ts, latest);
+    }
+
+    saveToCache(cacheKey, JSON.stringify(data), 'application/json');
+    res.json(data);
+  } catch (err) {
+    console.error('Erreur débit turbiné:', err.message);
+    res.status(500).json({ error: 'Débit turbiné indisponible', details: err.message });
+  }
+});
+
 // ============================================================
 // Utilitaires
 // ============================================================
@@ -282,7 +348,7 @@ app.post('/history/cleanup', (req, res) => {
 // ============================================================
 
 app.listen(PORT, () => {
-  console.log(`\n\u2705 Proxy + Sauvegarde 7 jours (JSON files) lancé sur http://localhost:${PORT}`);
+  console.log(`\n✅ Proxy + Sauvegarde 7 jours (JSON files) lancé sur http://localhost:${PORT}`);
   console.log(`   Historique : /api/history/demand?hours=168`);
   console.log(`   Nettoyage manuel : POST /history/cleanup\n`);
 });
