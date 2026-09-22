@@ -1,0 +1,9 @@
+# Dépendances : régénérées par `npm install` depuis package.json / package-lock.json
+node_modules/
+
+# Artefacts locaux
+proxy.log
+*.log
+
+# macOS
+.DS_Store

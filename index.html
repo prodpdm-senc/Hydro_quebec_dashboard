@@ -207,7 +207,6 @@
         .nuclear-plant-name { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
         .nuclear-plant-meta { font-size: 0.7rem; color: var(--text-secondary); margin-top: 2px; }
         .nuclear-cap-display { text-align: right; }
-        .nuclear-cap-mw  { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
         .nuclear-live-mw { font-size: 0.95rem; font-weight: 700; color: #4a5fa3; }
         .nuclear-cap-label { font-size: 0.68rem; color: var(--text-secondary); }
         .nuclear-badge {
@@ -221,7 +220,6 @@
         }
         .badge-live     { background:rgba(46,139,106,0.15);  color:#2e8b6a;  border:1px solid rgba(46,139,106,0.3); }
         .badge-estimate { background:rgba(196,122,46,0.15);  color:#c47a2e;  border:1px solid rgba(196,122,46,0.3); }
-        .badge-refurb   { background:rgba(42,111,168,0.15); color:#2a6fa8;  border:1px solid rgba(42,111,168,0.3); }
         .nuclear-units  { padding: 10px 16px 13px; display: flex; flex-direction: column; gap: 5px; }
         .unit-row { display: grid; grid-template-columns: 38px 1fr 58px 56px; align-items: center; gap: 8px; }
         .unit-label { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); }
@@ -332,9 +330,6 @@
             }
             .nuclear-card:hover { transform: none; }
             .plant-chart-container { height: 230px; }
-
-            /* Ontario period bar buttons */
-            #ontarioPeriodBar { gap: 5px; }
 
             /* Ontario chart header — stack vertically */
             #tab-ontario .d-flex.justify-content-between {
@@ -739,11 +734,9 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <!-- Core utilities and state -->
-<script src="js/utils/dom-helpers.js"></script>
-<script src="js/utils/formatters.js"></script>
-<script src="js/utils/storage-utils.js"></script>
-<script src="js/state.js"></script>
-<script src="js/api.js"></script>
+<!-- Seul chart-manager.js sert à cette page (graphiques des réservoirs).
+     dom-helpers, formatters, storage-utils, state et api n'y sont référencés
+     nulle part — index-prod.html continue de les charger. -->
 <script src="js/chart-manager.js"></script>
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
@@ -946,6 +939,8 @@ function destroyChart(key) {
 //  HELPER: safe element setter
 // ─────────────────────────────────────────────────────────────────────────────
 function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+// Somme des sources de production d'un enregistrement `valeurs` (répétée 8 fois auparavant)
+function totalMW(v) { return (v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0); }
 function fmtMW(v) { return Math.round(v).toLocaleString('fr-CA') + ' MW'; }
 function fmtDate(d) { return new Date(d).toLocaleString('fr-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
 
@@ -1000,7 +995,7 @@ async function loadProductionTabWithHistory() {
             .filter(r => {
                 const v = r.valeurs;
                 return new Date(r.date) <= now &&
-                    (v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0) > 0;
+                    totalMW(v) > 0;
             })
             .slice(-672);
         // Persist to 7-day rolling storage
@@ -1010,12 +1005,12 @@ async function loadProductionTabWithHistory() {
         let curIdx = json.indexDonneePlusRecent;
         while (curIdx > 0) {
             const v = json.details[curIdx].valeurs;
-            if ((v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0) > 0) break;
+            if (totalMW(v) > 0) break;
             curIdx--;
         }
         const cur = json.details[curIdx];
         const cv  = cur.valeurs;
-        const total = (cv.hydraulique||0)+(cv.eolien||0)+(cv.thermique||0)+(cv.solaire||0)+(cv.autres||0);
+        const total = totalMW(cv);
 
         set('p-total',   fmtMW(total));
         set('p-time',    'Au ' + fmtDate(cur.date));
@@ -1241,7 +1236,7 @@ async function loadAnalysisTab() {
     // ── Stats ──
     const latestProd   = store.syncedProduction[store.syncedProduction.length-1].valeurs;
     const latestDemand = store.syncedDemand[store.syncedDemand.length-1].valeurs.demandeTotal;
-    const totalProd = (latestProd.hydraulique||0)+(latestProd.eolien||0)+(latestProd.thermique||0)+(latestProd.solaire||0)+(latestProd.autres||0);
+    const totalProd = totalMW(latestProd);
 
     set('a-ratio',       ((totalProd/latestDemand)*100).toFixed(1));
     set('a-hydro-share', ((latestProd.hydraulique||0)/totalProd*100).toFixed(1));
@@ -1257,9 +1252,7 @@ async function loadAnalysisTab() {
     setRange('rng-pvd', store.syncedDemand);
     const labels  = spanLabels(store.syncedDemand);
     const demVals = store.syncedDemand.map(r => r.valeurs.demandeTotal);
-    const proVals = store.syncedProduction.map(r => {
-        const v=r.valeurs; return (v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0);
-    });
+    const proVals = store.syncedProduction.map(r => totalMW(r.valeurs));
 
     buildLineChart('pvdChart', labels, [
         { label:'Demande',    data:demVals, borderColor:'#9e3d3d', backgroundColor:'rgba(158,61,61,0.08)',  borderWidth:2, pointRadius:0 },
@@ -1345,26 +1338,6 @@ function buildLineChart(id, labels, datasets, multiLine=false) {
     charts[id] = new Chart(document.getElementById(id).getContext('2d'), { type:'line', data:{ labels, datasets }, options });
 }
 
-function buildBarChart(id, labels, datasets) {
-    destroyChart(id);
-    const { text, grid } = chartColors();
-    charts[id] = new Chart(
-        document.getElementById(id).getContext('2d'),
-        {
-            type:'bar',
-            data:{ labels, datasets },
-            options:{
-                responsive:true, maintainAspectRatio:false,
-                plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>Math.round(c.parsed.y).toLocaleString('fr-CA')+' MW' }} },
-                scales:{
-                    x:{ grid:{display:false}, ticks:{color:text, font:{size:11}} },
-                    y:{ beginAtZero:false, grid:{color:grid}, ticks:{color:text, callback:v=>v.toLocaleString('fr-CA')+' MW', font:{size:11}} }
-                },
-                layout:{ padding:{bottom:10} }
-            }
-        }
-    );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CANADA TAB
@@ -1435,7 +1408,7 @@ async function loadCanadaTab() {
     let qcLiveMW = null;
     if (store.production.length) {
         const last = store.production[store.production.length - 1].valeurs;
-        qcLiveMW   = (last.hydraulique||0)+(last.eolien||0)+(last.thermique||0)+(last.solaire||0)+(last.autres||0);
+        qcLiveMW   = totalMW(last);
         set('ca-qc-live',      Math.round(qcLiveMW).toLocaleString('fr-CA') + ' MW');
         set('ca-qc-live-time', '● Temps réel Hydro-Québec');
     }
@@ -2326,108 +2299,6 @@ async function showPlantChart(plantId) {
 }
 
 // Legacy: keep for compatibility
-function showPlantChartLegacy(plantId) {
-    const data = nuclearPlantData[plantId];
-    if (!data) return;
-
-    const { plant, resolved, isLepreau } = data;
-    const hours  = nuclearIesoHours;
-    const modal  = new bootstrap.Modal(document.getElementById('plantModal'));
-    const { text: ct, grid: cg } = chartColors();
-
-    document.getElementById('plantModalTitle').textContent = `☢ ${plant.name}`;
-    document.getElementById('plantModalMeta').textContent = `${plant.operator} · ${plant.location} · ${plant.reactorType}`;
-
-    const hasLive = resolved.some(u => u.source === 'live');
-    const hasEst  = !isLepreau && resolved.some(u => u.source === 'estimate');
-    let srcLabel = isLepreau
-        ? `Estimation ~${(0.88*100).toFixed(0)}% CF · NB Power hors couverture IESO`
-        : hasLive  ? `Données IESO temps réel · ${hours.length} heures disponibles`
-        : hasEst   ? `Distribution proportionnelle (fallback Niveau 2) · ${hours.length}h`
-        : 'Source indisponible';
-    document.getElementById('plantModalSource').textContent = srcLabel;
-
-    const wrap = document.getElementById('plantChartWrap');
-
-    if (isLepreau || (!hasLive && !hasEst)) {
-        wrap.innerHTML = `
-          <div class="no-hourly-msg">
-            <div style="font-size:2rem;margin-bottom:10px">📊</div>
-            <strong>${isLepreau ? 'Point Lepreau — NB Power' : 'Données horaires indisponibles'}</strong><br>
-            ${isLepreau
-                ? `Production estimée : <strong>${Math.round(705 * 0.88).toLocaleString('fr-CA')} MW</strong> (~88 % CF · CANDU 6 · 705 MW nominal)`
-                : "La source IESO n'a pas retourné de données par unité."}
-          </div>`;
-        modal.show();
-        return;
-    }
-
-    wrap.innerHTML = `<div class="plant-chart-container"><canvas id="plantHourlyChart"></canvas></div>`;
-
-    const xLabels = hours.map(h => `H${h}`);
-
-    const COLORS = ['#4a5fa3','#2a6fa8','#2e8b6a','#c47a2e','#8a3a5a','#3a7d8e','#b84848','#4a5fa3'];
-    const datasets = resolved
-        .filter(u => u.mwHours && u.mwHours.some(v => v != null && v > 0))
-        .map((u, i) => ({
-            label: `Unité ${u.label}`,
-            data: u.mwHours,
-            borderColor: COLORS[i % COLORS.length],
-            backgroundColor: COLORS[i % COLORS.length] + '18',
-            borderWidth: 2,
-            pointRadius: hours.length <= 24 ? 3 : 0,
-            pointHoverRadius: 5,
-            tension: 0.25,
-            fill: false,
-            spanGaps: true
-        }));
-
-    // Ligne total de la centrale
-    const plantTotalByHour = hours.map((_, hi) =>
-        resolved.reduce((s, u) => s + (u.mwHours?.[hi] ?? 0), 0)
-    );
-    datasets.push({
-        label: 'Total centrale',
-        data: plantTotalByHour,
-        borderColor: '#c47a2e',
-        backgroundColor: 'rgba(245,158,11,0.08)',
-        borderWidth: 2.5,
-        borderDash: [5, 3],
-        pointRadius: 0,
-        tension: 0.25,
-        fill: false,
-        spanGaps: true
-    });
-
-    destroyChart('plantHourlyChart');
-    charts['plantHourlyChart'] = new Chart(
-        document.getElementById('plantHourlyChart').getContext('2d'),
-        {
-            type: 'line',
-            data: { labels: xLabels, datasets },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'top', labels: { color: ct, font: { size: 11 }, boxWidth: 14, padding: 12 } },
-                    tooltip: {
-                        mode: 'index', intersect: false,
-                        callbacks: {
-                            label: c => ` ${c.dataset.label} : ${c.parsed.y != null ? Math.round(c.parsed.y).toLocaleString('fr-CA') + ' MW' : 'N/D'}`
-                        }
-                    }
-                },
-                interaction: { mode: 'index', intersect: false },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: ct, font: { size: 11 }, maxRotation: 0 } },
-                    y: { grid: { color: cg }, ticks: { color: ct, callback: v => v.toLocaleString('fr-CA') + ' MW', font: { size: 11 } }, beginAtZero: false }
-                },
-                layout: { padding: { bottom: 4 } }
-            }
-        }
-    );
-
-    modal.show();
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CSV EXPORT
@@ -2443,7 +2314,7 @@ function exportCSV(type) {
         headers = ['Date et heure','Hydraulique (MW)','Éolien (MW)','Thermique (MW)','Solaire (MW)','Autres (MW)','Total (MW)'];
         rows = store.production.map(r => {
             const v=r.valeurs;
-            const total=(v.hydraulique||0)+(v.eolien||0)+(v.thermique||0)+(v.solaire||0)+(v.autres||0);
+            const total=totalMW(v);
             return [fmtDate(r.date),v.hydraulique||0,v.eolien||0,v.thermique||0,v.solaire||0,v.autres||0,Math.round(total)];
         });
     } else if (type === 'exchange' && store.exchange.length) {
@@ -2453,7 +2324,7 @@ function exportCSV(type) {
         headers = ['Date et heure','Demande (MW)','Production (MW)','Bilan (MW)','Ratio (%)'];
         rows = store.syncedDemand.map((d,i) => {
             const dem=d.valeurs.demandeTotal, pv=store.syncedProduction[i].valeurs;
-            const prod=(pv.hydraulique||0)+(pv.eolien||0)+(pv.thermique||0)+(pv.solaire||0)+(pv.autres||0);
+            const prod=totalMW(pv);
             return [fmtDate(d.date),Math.round(dem),Math.round(prod),Math.round(prod-dem),((prod/dem)*100).toFixed(1)];
         });
     } else {

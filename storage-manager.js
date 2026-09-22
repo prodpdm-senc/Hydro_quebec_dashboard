@@ -45,7 +45,7 @@ const StorageManager = (() => {
     if (!exists) {
       stored[dataType].push(data);
       // Keep sorted by date
-      stored[dataType].sort((a, b) => new Date(a.date) - new Date(b.date));
+      stored[dataType].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
     }
 
     stored.lastUpdated = Date.now();
@@ -65,23 +65,31 @@ const StorageManager = (() => {
      */
     const stored = load();
 
+    // Un Set des dates déjà connues, par type : le .some() précédent rescannait
+    // tout le tableau pour chacune des ~672 entrées entrantes, soit ~450 000
+    // comparaisons par lot, répétées pour demand/production/exchange à chaque
+    // rafraîchissement (toutes les 5 min).
+    const seen = {};
+    const touched = new Set();
+
     entries.forEach(({ type, date, valeurs }) => {
       if (!stored[type]) {
         stored[type] = [];
       }
-
-      // Avoid duplicates
-      const exists = stored[type].some(d => d.date === date);
-      if (!exists) {
+      if (!seen[type]) {
+        seen[type] = new Set(stored[type].map(d => d.date));
+      }
+      if (!seen[type].has(date)) {
+        seen[type].add(date);
         stored[type].push({ date, valeurs });
+        touched.add(type);
       }
     });
 
-    // Sort all arrays
-    Object.keys(['demand', 'production', 'exchange']).forEach(key => {
-      if (stored[key]) {
-        stored[key].sort((a, b) => new Date(a.date) - new Date(b.date));
-      }
+    // Object.keys(['demand', …]) renvoyait les index '0','1','2' : stored['0']
+    // était toujours undefined, donc ce tri ne s'exécutait jamais.
+    touched.forEach(type => {
+      stored[type].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
     });
 
     stored.lastUpdated = Date.now();
@@ -117,10 +125,12 @@ const StorageManager = (() => {
     const data = load();
     const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
 
+    const recent = arr => arr.filter(d => Date.parse(d.date) >= cutoffTime);
+
     return {
-      demand: data.demand.filter(d => new Date(d.date) >= new Date(cutoffTime)),
-      production: data.production.filter(d => new Date(d.date) >= new Date(cutoffTime)),
-      exchange: data.exchange.filter(d => new Date(d.date) >= new Date(cutoffTime)),
+      demand: recent(data.demand),
+      production: recent(data.production),
+      exchange: recent(data.exchange),
       lastUpdated: data.lastUpdated
     };
   };
@@ -136,9 +146,10 @@ const StorageManager = (() => {
     };
 
     // Remove entries older than 7 days
-    data.demand = data.demand.filter(d => new Date(d.date) >= new Date(cutoffTime));
-    data.production = data.production.filter(d => new Date(d.date) >= new Date(cutoffTime));
-    data.exchange = data.exchange.filter(d => new Date(d.date) >= new Date(cutoffTime));
+    const recent = arr => arr.filter(d => Date.parse(d.date) >= cutoffTime);
+    data.demand = recent(data.demand);
+    data.production = recent(data.production);
+    data.exchange = recent(data.exchange);
 
     data.lastUpdated = Date.now();
     data.version = 1;
