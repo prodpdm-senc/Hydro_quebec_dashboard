@@ -407,7 +407,6 @@
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-demand"     id="btn-demand">💧 Hydro-Québec</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-ontario"   id="btn-ontario">⚡ Ontario</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-nuclear"   id="btn-nuclear">☢ Nucléaire</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-production" id="btn-production">🔋 Production HQ</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-reservoirs"  id="btn-reservoirs">🏞 Réservoirs</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-exchange"   id="btn-exchange">🔄 Échanges HQ</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#tab-analysis"   id="btn-analysis">📊 Analyse HQ</button></li>
@@ -423,52 +422,8 @@
 
         <div class="tab-content">
 
-            <!-- ══════════════════════════════ DEMANDE ══════════════════════════════ -->
+            <!-- ══════════════════════════════ HYDRO-QUÉBEC (PRODUCTION) ══════════════════════════════ -->
             <div class="tab-pane fade" id="tab-demand">
-                <div class="row g-3 mb-3">
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Demande actuelle</div>
-                        <div class="stat-value text-primary" id="d-current">--</div>
-                        <div class="stat-time" id="d-current-time">--</div>
-                    </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Pic (24h)</div>
-                        <div class="stat-value text-danger" id="d-peak">--</div>
-                        <div class="stat-time" id="d-peak-time">--</div>
-                    </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Minimum (24h)</div>
-                        <div class="stat-value text-success" id="d-low">--</div>
-                        <div class="stat-time" id="d-low-time">--</div>
-                    </div></div>
-                    <div class="col-6 col-md-3"><div class="card stat-card">
-                        <div class="stat-label">Moyenne (24h)</div>
-                        <div class="stat-value text-info" id="d-avg">--</div>
-                        <div class="stat-time">MW</div>
-                    </div></div>
-                </div>
-                <div class="card"><div class="chart-container">
-                    <h6 class="mb-2">Demande sur 24h</h6>
-                    <canvas id="demandChart"></canvas>
-                </div></div>
-                <div class="row g-3 mb-3">
-                    <div class="col-lg-6"><div class="card"><div class="chart-container-sm">
-                        <h6 class="mb-2">Moyenne par jour de la semaine</h6>
-                        <canvas id="weekdayChart"></canvas>
-                    </div></div></div>
-                    <div class="col-lg-6"><div class="card"><div class="chart-container-sm">
-                        <h6 class="mb-2">Moyenne par heure de la journée</h6>
-                        <canvas id="hourlyChart"></canvas>
-                    </div></div></div>
-                </div>
-                <div class="tab-actions">
-                    <button class="btn btn-light" onclick="loadDemandTabWithHistory()">🔄 Actualiser</button>
-                    <button class="btn btn-success" onclick="exportCSV('demand')">📥 Export CSV</button>
-                </div>
-            </div>
-
-            <!-- ══════════════════════════════ PRODUCTION ══════════════════════════════ -->
-            <div class="tab-pane fade" id="tab-production">
                 <div class="row g-3 mb-3">
                     <div class="col-6 col-md-3"><div class="card stat-card">
                         <div class="stat-label">Production totale</div>
@@ -999,7 +954,7 @@ function fmtMW(v) { return Math.round(v).toLocaleString('fr-CA') + ' MW'; }
 function fmtDate(d) { return new Date(d).toLocaleString('fr-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  DEMAND TAB
+//  DONNÉES DE DEMANDE (aucun onglet dédié — alimente l'onglet Analyse HQ)
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadDemandTabWithHistory() {
     log('🔄 Chargement Demande');
@@ -1026,10 +981,6 @@ async function loadDemandTabWithHistory() {
             }
         }
         if (!cur?.valeurs?.demandeTotal) throw new Error('Aucune valeur demande valide trouvée');
-        set('d-current',      fmtMW(cur.valeurs.demandeTotal));
-        set('d-current-time', 'Au ' + fmtDate(cur.date));
-
-        renderDemandCharts();
         log(`✅ Demande: ${store.demand.length} pts · actuelle ${fmtMW(cur.valeurs.demandeTotal)}`);
     } catch(err) {
         log(`❌ Demande: ${err.message}`, true);
@@ -1037,50 +988,8 @@ async function loadDemandTabWithHistory() {
     }
 }
 
-function renderDemandCharts() {
-    const recent = sliceByPeriod(store.demand);
-    if (!recent.length) return;
-    const pLabel = periodLabel();
-
-    // Update period-sensitive stat labels
-    const dPeak = document.getElementById('d-peak')?.closest('.card')?.querySelector('.stat-label');
-    const dLow  = document.getElementById('d-low')?.closest('.card')?.querySelector('.stat-label');
-    const dAvg  = document.getElementById('d-avg')?.closest('.card')?.querySelector('.stat-label');
-    if (dPeak) dPeak.textContent = `Pic (${pLabel})`;
-    if (dLow)  dLow.textContent  = `Minimum (${pLabel})`;
-    if (dAvg)  dAvg.textContent  = `Moyenne (${pLabel})`;
-
-    let peak=-Infinity, low=Infinity, sum=0, pTime='', lTime='';
-    recent.forEach(r => {
-        const v = r.valeurs.demandeTotal;
-        sum += v;
-        if (v > peak) { peak=v; pTime=fmtDate(r.date); }
-        if (v < low)  { low=v;  lTime=fmtDate(r.date); }
-    });
-    set('d-peak',      fmtMW(peak));   set('d-peak-time', pTime);
-    set('d-low',       fmtMW(low));    set('d-low-time',  lTime);
-    set('d-avg',       fmtMW(sum/recent.length));
-
-    // Main chart
-    const labels = recent.map(r => xLabel(r.date));
-    const values = recent.map(r => r.valeurs.demandeTotal);
-    buildLineChart('demandChart', labels, [{ label:'Demande', data:values, borderColor:'#4a7fa5', backgroundColor:'rgba(74,127,165,0.12)', borderWidth:2.5, pointRadius:0 }]);
-
-    // By weekday
-    const wdBuckets = [[], [], [], [], [], [], []];
-    recent.forEach(r => wdBuckets[new Date(r.date).getDay()].push(r.valeurs.demandeTotal));
-    const wdAvg = wdBuckets.map(b => b.length ? b.reduce((a,c)=>a+c,0)/b.length : 0);
-    buildBarChart('weekdayChart', ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'], [{ label:'Moyenne MW', data:wdAvg, backgroundColor:'rgba(46,139,106,0.6)', borderColor:'#2e8b6a', borderWidth:2 }]);
-
-    // By hour
-    const hrBuckets = Array.from({length:24},()=>[]);
-    recent.forEach(r => hrBuckets[new Date(r.date).getHours()].push(r.valeurs.demandeTotal));
-    const hrAvg = hrBuckets.map(b => b.length ? b.reduce((a,c)=>a+c,0)/b.length : 0);
-    buildLineChart('hourlyChart', Array.from({length:24},(_,i)=>`${i}h`), [{ label:'Moyenne MW', data:hrAvg, borderColor:'#c47a2e', backgroundColor:'rgba(196,122,46,0.1)', borderWidth:2, pointRadius:3, tension:0.4 }]);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-//  PRODUCTION TAB
+//  ONGLET HYDRO-QUÉBEC — PRODUCTION
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadProductionTabWithHistory() {
     log('🔄 Chargement Production');
@@ -2562,8 +2471,7 @@ document.querySelectorAll('.period-btn').forEach(btn => {
 
         // Re-render the currently active tab
         const active = document.querySelector('.nav-link.active')?.id;
-        if      (active === 'btn-demand')     { if(store.demand.length)     renderDemandCharts(); }
-        else if (active === 'btn-production') { if(store.production.length) renderProductionCharts(); }
+        if      (active === 'btn-demand')     { if(store.production.length) renderProductionCharts(); }
         else if (active === 'btn-exchange')   { if(store.exchange.length)   renderExchangeCharts(); }
         else if (active === 'btn-analysis')   { if(store.demand.length && store.production.length) loadAnalysisTab(); }
     });
@@ -2572,8 +2480,7 @@ document.querySelectorAll('.period-btn').forEach(btn => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  TAB SWITCHING — lazy load
 // ─────────────────────────────────────────────────────────────────────────────
-document.getElementById('btn-demand').addEventListener('shown.bs.tab',     () => { if(!store.demand.length)     loadDemandTabWithHistory(); });
-document.getElementById('btn-production').addEventListener('shown.bs.tab', () => { if(!store.production.length) loadProductionTabWithHistory(); });
+document.getElementById('btn-demand').addEventListener('shown.bs.tab',     () => { if(!store.production.length) loadProductionTabWithHistory(); });
 document.getElementById('btn-exchange').addEventListener('shown.bs.tab',   () => { if(!store.exchange.length)   loadExchangeTabWithHistory(); });
 document.getElementById('btn-analysis').addEventListener('shown.bs.tab',   () => { loadAnalysisTab(); });
 document.getElementById('btn-canada').addEventListener('shown.bs.tab',     () => { loadCanadaTab(); });
@@ -2948,8 +2855,7 @@ document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () =>
 // ─────────────────────────────────────────────────────────────────────────────
 setInterval(() => {
     const active = document.querySelector('.nav-link.active')?.id;
-    if (active === 'btn-demand')          loadDemandTabWithHistory();
-    else if (active === 'btn-production') loadProductionTabWithHistory();
+    if (active === 'btn-demand')          loadProductionTabWithHistory();
     else if (active === 'btn-exchange')   loadExchangeTabWithHistory();
     else if (active === 'btn-analysis')   loadAnalysisTab();
     else if (active === 'btn-canada')     loadCanadaTab();
