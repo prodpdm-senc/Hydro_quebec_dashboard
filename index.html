@@ -526,9 +526,30 @@
                     </div></div>
                 </div>
                 <div class="card"><div class="chart-container">
-                    <h6 class="mb-2">Niveaux d'eau réservoirs (24h)</h6>
+                    <h6 class="mb-2" id="chartTitle">Niveaux d'eau réservoirs (24h)</h6>
                     <canvas id="reservoirsChart"></canvas>
                 </div></div>
+
+                <div class="card"><div class="chart-container">
+                    <h6 class="mb-2" id="turbineChartTitle">Débit turbiné (24h)</h6>
+                    <canvas id="turbineChart"></canvas>
+                </div></div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-6"><div class="card">
+                        <div style="padding: 16px;">
+                            <h6 class="mb-3">⚡ Débit turbiné total</h6>
+                            <div class="production-grid" id="turbinedFlowGrid"></div>
+                        </div>
+                    </div></div>
+                    <div class="col-lg-6"><div class="card">
+                        <div style="padding: 16px;">
+                            <h6 class="mb-3">💧 Tous les réservoirs</h6>
+                            <div class="production-grid" id="allReservoirsGrid"></div>
+                        </div>
+                    </div></div>
+                </div>
+
                 <div class="tab-actions">
                     <button class="btn btn-light" onclick="loadReservoirsData()">🔄 Actualiser</button>
                 </div>
@@ -2597,6 +2618,51 @@ async function loadReservoirsData() {
         // Render chart (top 5 stations)
         renderReservoirsChart(byStation);
 
+        // Render turbined flow grid
+        const turbinedGrid = document.getElementById('turbinedFlowGrid');
+        turbinedGrid.innerHTML = '';
+        if (flowData.length > 0) {
+            const latest = flowData[flowData.length - 1];
+            const flow = parseFloat(latest.valeur) || 0;
+            const flowCard = document.createElement('div');
+            flowCard.className = 'production-card card';
+            flowCard.innerHTML = `
+                <div class="production-label">Débit total</div>
+                <div class="production-value">${flow.toFixed(0)}</div>
+                <div class="production-percent" style="color: ${flow > 5000 ? '#27ae60' : '#e74c3c'};">
+                    ${flow > 0 ? '⚡ Actif' : '⏸ Arrêt'}
+                </div>
+            `;
+            turbinedGrid.appendChild(flowCard);
+        }
+
+        // Render all reservoirs grid with click handlers
+        const allResGrid = document.getElementById('allReservoirsGrid');
+        allResGrid.innerHTML = '';
+        Object.entries(byStation).forEach(([station, records]) => {
+            if (records.length === 0) return;
+            const latest = records[records.length - 1];
+            const level = latest.value || 0;
+            const trend = records.length > 1 ? (latest.value - records[0].value) : 0;
+            const trendColor = trend > 0 ? '#27ae60' : trend < 0 ? '#e74c3c' : '#95a5a6';
+
+            const card = document.createElement('div');
+            card.className = 'production-card card';
+            card.style.cursor = 'pointer';
+            card.dataset.station = station;
+            card.innerHTML = `
+                <div class="production-label">${station.substring(0, 20)}</div>
+                <div class="production-value">${level.toFixed(1)}</div>
+                <div class="production-percent" style="color: ${trendColor};">
+                    ${trend > 0 ? '+' : ''}${trend.toFixed(1)} m
+                </div>
+            `;
+            card.addEventListener('click', () => filterReservoirChart(station, byStation, flowData));
+            card.addEventListener('mouseover', () => card.style.transform = 'scale(1.05)');
+            card.addEventListener('mouseout', () => card.style.transform = 'scale(1)');
+            allResGrid.appendChild(card);
+        });
+
     } catch (err) {
         log('❌ Erreur réservoirs: ' + err.message);
         document.getElementById('r-level').textContent = '❌';
@@ -2632,6 +2698,56 @@ function renderReservoirsChart(byStation) {
         scales: { y: { ticks: { color: 'var(--text-primary)' } }, x: { ticks: { color: 'var(--text-primary)' } } }
     });
 }
+
+function filterReservoirChart(station, byStation, flowData) {
+    const canvas = document.getElementById('reservoirsChart');
+    const turbineCanvas = document.getElementById('turbineChart');
+    if (!canvas || !turbineCanvas || !window.chartManager) return;
+
+    // Niveau chart for selected reservoir
+    const records = byStation[station] || [];
+    const dates = records.map(r => r.date).slice(-24);
+    const levelLabels = dates.map(d => new Date(d).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
+
+    window.chartManager.createOrUpdate(canvas, 'line', {
+        labels: levelLabels,
+        datasets: [{
+            label: station,
+            data: records.slice(-24).map(r => r.value),
+            borderColor: '#3498db',
+            backgroundColor: '#3498db20',
+            tension: 0.3
+        }]
+    }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { ticks: { color: 'var(--text-primary)' } }, x: { ticks: { color: 'var(--text-primary)' } } }
+    });
+
+    // Turbined flow chart
+    const flowRecords = flowData || [];
+    const flowDates = flowRecords.map(r => r.date).slice(-24);
+    const flowLabels = flowDates.map(d => new Date(d).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }));
+
+    window.chartManager.createOrUpdate(turbineCanvas, 'line', {
+        labels: flowLabels,
+        datasets: [{
+            label: 'Débit turbiné',
+            data: flowRecords.slice(-24).map(r => parseFloat(r.valeur) || 0),
+            borderColor: '#e74c3c',
+            backgroundColor: '#e74c3c20',
+            tension: 0.3
+        }]
+    }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { ticks: { color: 'var(--text-primary)' } }, x: { ticks: { color: 'var(--text-primary)' } } }
+    });
+
+    document.getElementById('chartTitle').textContent = `Niveau d'eau - ${station} (24h)`;
+    document.getElementById('turbineChartTitle').textContent = 'Débit turbiné total (24h)';
+}
+
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
 document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () => { loadOntarioTab(); });
 
