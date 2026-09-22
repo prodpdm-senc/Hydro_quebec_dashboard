@@ -133,6 +133,16 @@
             transition: background 0.2s;
         }
         .debug-toggle:hover { background: rgba(31,53,196,0.22); }
+        /* Cartes de tendance des réservoirs */
+        .trend-card { padding: 18px; height: 100%; }
+        .trend-region { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+        .trend-verdict { font-size: 1.7rem; font-weight: 700; margin: 6px 0 2px; line-height: 1.2; }
+        .trend-rate { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+        .trend-detail { font-size: 0.78rem; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
+        .trend-up      { color: #2e8b6a; }
+        .trend-down    { color: #9e3d3d; }
+        .trend-flat    { color: var(--text-secondary); }
+        .trend-mixed   { color: #c47a2e; }
         /* Section heading inside a tab — sits on the page gradient, not on a card */
         .section-title { color: var(--text-light); font-weight: 600; font-size: 1.05rem; margin: 28px 0 14px; }
         /* Action buttons */
@@ -458,6 +468,13 @@
                         <div class="stat-time" id="r-trend-time">--</div>
                     </div></div>
                 </div>
+                <h5 class="section-title">📈 Tendance des réservoirs de stockage</h5>
+                <div class="row g-3 mb-3" id="r-tendances">
+                    <div class="col-12"><div class="card" style="padding:16px; color:var(--text-secondary); font-size:0.85rem">
+                        Analyse en cours…
+                    </div></div>
+                </div>
+
                 <div class="card mb-3"><div style="padding:16px">
                     <div class="row g-3 align-items-end">
                         <div class="col-md-6">
@@ -2552,6 +2569,7 @@ async function loadReservoirsData() {
         setText('r-trend', derniere ? derniere.toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' }) : '--');
         setText('r-trend-time', derniere ? derniere.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }) : '--');
 
+        analyserTendanceReservoirs(niveauxRows);
         remplirSelecteurRegions(parRegion);
         remplirSelecteurReservoirs(niveauxRows);
 
@@ -2562,6 +2580,143 @@ async function loadReservoirsData() {
         const grid = document.getElementById('centraleCharts');
         if (grid) grid.innerHTML = `<div class="col-12"><div class="alert alert-danger">${err.message}</div></div>`;
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TENDANCE DES RÉSERVOIRS DE STOCKAGE (Nord-du-Québec, Côte-Nord)
+//
+//  Ces deux régions portent les grands réservoirs à accumulation saisonnière
+//  d'Hydro-Québec : ce sont eux qui montent l'été et se vident l'hiver, donc
+//  ceux dont la tendance dit quelque chose sur la réserve énergétique.
+//
+//  Méthode. Pour chaque réservoir on ajuste une droite des moindres carrés sur
+//  sa série de 7 jours, ce qui donne une pente en m/jour — plus robuste qu'un
+//  simple premier-moins-dernier, sensible au bruit des deux points extrêmes.
+//  Un réservoir n'est compté « en hausse » ou « en baisse » que si sa variation
+//  sur la fenêtre dépasse son propre bruit (deux écarts-types des résidus), avec
+//  un plancher de 5 cm ; sinon il est « stable ». Ce test relatif évite d'avoir
+//  à fixer un seuil en mètres commun à des réservoirs de tailles très
+//  différentes.
+//
+//  Le verdict régional s'appuie sur la MÉDIANE des pentes, pas sur la moyenne :
+//  sans les superficies, on ne peut pas pondérer les réservoirs entre eux, et
+//  une médiane résiste à un réservoir qui bouge beaucoup plus que les autres.
+//  Lire ces chiffres comme une tendance de direction, pas comme un bilan de
+//  volume stocké — l'API ne publie pas les superficies.
+// ─────────────────────────────────────────────────────────────────────────────
+const REGIONS_STOCKAGE = [
+    { libelle: 'Nord-du-Québec', alias: ['nord du quebec', 'baie james', 'jamesie'] },
+    { libelle: 'Côte-Nord',      alias: ['cote nord', 'manicouagan'] }
+];
+
+// Les libellés de région de l'API ne sont pas garantis stables (accents, tirets,
+// casse). On compare sur une forme aplatie plutôt que caractère pour caractère.
+const aplatir = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z]+/g, ' ').trim();
+
+function medianeDe(valeurs) {
+    if (!valeurs.length) return 0;
+    const t = [...valeurs].sort((a, b) => a - b);
+    const m = t.length >> 1;
+    return t.length % 2 ? t[m] : (t[m - 1] + t[m]) / 2;
+}
+
+// Droite des moindres carrés sur une série { date, valeur }, avec test de bruit.
+function tendanceSerie(series) {
+    const n = series.length;
+    if (n < 4) return null;
+
+    const t0 = Date.parse(series[0].date);
+    const xs = series.map(r => (Date.parse(r.date) - t0) / 864e5);   // jours
+    const ys = series.map(r => r.valeur);
+    const fenetre = xs[n - 1];
+    if (!(fenetre > 0.5)) return null;   // moins de 12 h : pas de tendance à tirer
+
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let num = 0, den = 0;
+    for (let i = 0; i < n; i++) { num += (xs[i] - mx) * (ys[i] - my); den += (xs[i] - mx) ** 2; }
+    if (den === 0) return null;
+
+    const pente = num / den;                       // m/jour
+    let sse = 0;
+    for (let i = 0; i < n; i++) sse += (ys[i] - (my + pente * (xs[i] - mx))) ** 2;
+    const sigma = Math.sqrt(sse / Math.max(1, n - 2));   // bruit propre au réservoir
+    const variation = pente * fenetre;             // m sur la fenêtre
+
+    return {
+        pente, variation, fenetre,
+        significatif: Math.abs(variation) > Math.max(2 * sigma, 0.05),
+        sens: variation > 0 ? 'hausse' : 'baisse'
+    };
+}
+
+function analyserTendanceReservoirs(niveauxRows) {
+    const hote = document.getElementById('r-tendances');
+    if (!hote) return;
+
+    const parRegionBrut = groupBy(niveauxRows, 'regionqc');
+    const regionsVues = Object.keys(parRegionBrut);
+    log(`🏞 Régions de niveaux disponibles : ${regionsVues.join(', ') || 'aucune'}`);
+
+    const cartes = REGIONS_STOCKAGE.map(cible => {
+        // Une région de l'API correspond si sa forme aplatie contient un alias.
+        // Appariement dans ce sens uniquement : l'inverse ferait matcher une
+        // région nommée « Nord » avec l'alias « cote nord ».
+        const correspondantes = regionsVues.filter(r => {
+            const a = aplatir(r);
+            return cible.alias.some(al => a.includes(al));
+        });
+        const lignes = correspondantes.flatMap(r => parRegionBrut[r]);
+
+        if (!lignes.length) {
+            return carteTendance(cible.libelle, null, `Aucune station de niveau rattachée à cette région dans les données du jour.`);
+        }
+
+        const tendances = Object.values(groupBy(lignes, 'nom'))
+            .map(tendanceSerie)
+            .filter(Boolean);
+
+        if (!tendances.length) {
+            return carteTendance(cible.libelle, null, `Séries trop courtes pour en tirer une tendance.`);
+        }
+
+        const hausses = tendances.filter(t => t.significatif && t.sens === 'hausse').length;
+        const baisses = tendances.filter(t => t.significatif && t.sens === 'baisse').length;
+        const stables = tendances.length - hausses - baisses;
+        const medPente = medianeDe(tendances.map(t => t.pente));
+        const signif = hausses + baisses;
+
+        let verdict, classe;
+        if (signif === 0)                       { verdict = 'Stable';    classe = 'trend-flat'; }
+        else if (hausses / signif >= 0.6)       { verdict = '↗ En hausse'; classe = 'trend-up'; }
+        else if (baisses / signif >= 0.6)       { verdict = '↘ En baisse'; classe = 'trend-down'; }
+        else                                    { verdict = '↕ Contrasté'; classe = 'trend-mixed'; }
+
+        const jours = Math.max(...tendances.map(t => t.fenetre));
+        const signe = medPente > 0 ? '+' : '';
+        return carteTendance(cible.libelle, { verdict, classe },
+            `<div class="trend-rate">${signe}${medPente.toFixed(3)} m/jour <span style="font-weight:400">(médiane)</span></div>`
+            + `<div class="trend-detail">`
+            + `${tendances.length} réservoir${tendances.length > 1 ? 's' : ''} analysé${tendances.length > 1 ? 's' : ''} · `
+            + `${baisses} en baisse · ${hausses} en hausse · ${stables} stable${stables > 1 ? 's' : ''}<br>`
+            + `Fenêtre de ${jours.toFixed(1)} jours`
+            + `</div>`);
+    });
+
+    hote.innerHTML = cartes.join('');
+}
+
+function carteTendance(region, etat, corpsHtml) {
+    const tete = etat
+        ? `<div class="trend-verdict ${etat.classe}">${etat.verdict}</div>`
+        : `<div class="trend-verdict trend-flat" style="font-size:1.1rem">Indisponible</div>`;
+    const corps = etat ? corpsHtml : `<div class="trend-detail">${corpsHtml}</div>`;
+    return `<div class="col-md-6"><div class="card trend-card">
+        <div class="trend-region">${region}</div>
+        ${tete}
+        ${corps}
+    </div></div>`;
 }
 
 function remplirSelecteurRegions(parRegion) {
