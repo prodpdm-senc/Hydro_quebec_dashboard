@@ -2635,6 +2635,73 @@ async function hydroFetch(kind) {
         .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
+// Puissance installée des centrales, en MW.
+// Source : Hydro-Québec Production, « Centrales », mise à jour du 1er janvier 2026.
+// https://www.hydroquebec.com/production/centrales.html
+//
+// Les clés sont les noms tels que les renvoie l'API ODS, qui diffèrent parfois
+// du nom officiel : HQ inscrit « Jean-Lesage (Manic-2) » là où l'API dit
+// « Manic-2 ». Les correspondances non évidentes sont annotées.
+const PUISSANCE_MW = {
+    'Beauharnois': 1864,
+    'Beaumont': 270,
+    'Bersimis-1': 1125,
+    'Bersimis-2': 845,
+    'Brisay': 469,
+    'Bryson': 68,
+    'Carillon': 762,
+    'Chelsea': 144,
+    'Chute-Allard': 62,
+    'Chute-Bell': 10,
+    'Chute-Hemmings': 29,
+    'Cèdres': 113,                  // HQ : « Les Cèdres »
+    'Drummondville': 16,
+    'Eastmain-1': 480,
+    'Grand-Mère': 230,              // HQ : « Rocher-de-Grand-Mère »
+    'Hart-Jaune': 51,
+    'La Gabelle': 124,
+    'La Grande-1': 1436,
+    'La Grande-3': 2417,
+    'La Grande-4': 2779,
+    'La Tuque': 287,
+    'Laforge-1': 878,
+    'Laforge-2': 319,
+    'Manic-1': 184,
+    'Manic-2': 1229,                // HQ : « Jean-Lesage (Manic-2) »
+    'Manic-3': 1326,                // HQ : « René-Lévesque (Manic-3) »
+    'Manic-5': 1596,
+    'Mercier': 55,
+    'Mitis-1': 6,
+    'Mitis-2': 4,
+    'Outardes-2': 523,
+    'Outardes-3': 1026,
+    'Outardes-4': 785,
+    'Paugan': 216,
+    'Première-Chute': 124,
+    'Péribonka': 385,
+    'Rapide-2': 61,
+    'Rapide-7': 61,
+    'Rapide-Blanc': 217,
+    'Rapides-Farmers': 98,          // HQ : « Rapides-Farmer »
+    'Rapides-des-Coeurs': 76,       // HQ : « Rapide-des-Cœurs »
+    'Rapides-des-Quinze': 111,
+    'Rapides-des-Îles': 176,
+    'Rivière-des-Prairies': 54,
+    'Robert-Bourassa': 5616,
+    'Romaine-1': 270,
+    'Romaine-2': 640,
+    'Romaine-3': 395,
+    'Romaine-4': 245,
+    'Sainte-Marguerite-3': 882,
+    'Sarcelle': 150,
+    'Shawinigan': 384,              // Shawinigan-2 (200) + Shawinigan-3 (184) :
+                                    // l'API ne publie qu'un point pour le site.
+    'Toulnustouc': 526,
+    'Trenche': 302
+    // Saint-Narcisse est absent : arrêtée en 2018, fermeture définitive en 2021
+    // et barrage en démantèlement, donc retirée de la liste d'HQ.
+};
+
 const CENTRALE_SLOTS = 6;
 let hydroData = { parRegion: {}, niveaux: {} };
 
@@ -2658,8 +2725,18 @@ async function loadReservoirsData() {
         const parRegion = {};
         Object.entries(groupBy(turbineRows, 'regionqc')).forEach(([region, rows]) => {
             parRegion[region] = Object.entries(groupBy(rows, 'nom'))
-                .map(([nom, series]) => ({ nom, series, actuel: series[series.length - 1].valeur }))
-                .sort((a, b) => b.actuel - a.actuel);
+                .map(([nom, series]) => ({
+                    nom,
+                    series,
+                    actuel: series[series.length - 1].valeur,
+                    puissance: PUISSANCE_MW[nom] ?? null
+                }))
+                // Classement par puissance installée : le débit seul est
+                // trompeur, une centrale à faible chute déplace beaucoup d'eau
+                // pour peu de puissance (Beauharnois, 6 949 m³/s pour 1 864 MW,
+                // contre Robert-Bourassa, 5 616 MW sous 137 m de chute).
+                // Puissance inconnue en dernier.
+                .sort((a, b) => (b.puissance ?? -1) - (a.puissance ?? -1));
         });
 
         hydroData = { parRegion, niveaux: groupBy(niveauxRows, 'nom') };
@@ -2694,11 +2771,15 @@ function remplirSelecteurRegions(parRegion) {
 
     // Régions les plus productrices en premier.
     const regions = Object.entries(parRegion)
-        .map(([region, cs]) => ({ region, total: cs.reduce((s, c) => s + c.actuel, 0), n: cs.length }))
-        .sort((a, b) => b.total - a.total);
+        .map(([region, cs]) => ({
+            region,
+            n: cs.length,
+            mw: cs.reduce((s, c) => s + (c.puissance ?? 0), 0)
+        }))
+        .sort((a, b) => b.mw - a.mw);
 
     sel.innerHTML = regions
-        .map(r => `<option value="${r.region}">${r.region} — ${r.n} centrale${r.n > 1 ? 's' : ''}, ${Math.round(r.total).toLocaleString('fr-CA')} m³/s</option>`)
+        .map(r => `<option value="${r.region}">${r.region} — ${r.n} centrale${r.n > 1 ? 's' : ''}, ${r.mw.toLocaleString('fr-CA')} MW</option>`)
         .join('');
 
     sel.onchange = () => afficherRegion(sel.value);
@@ -2716,7 +2797,7 @@ function afficherRegion(region) {
     const resume = document.getElementById('r-region-summary');
     if (resume) {
         resume.textContent = reste > 0
-            ? `${CENTRALE_SLOTS} plus grosses centrales affichées · ${reste} autre${reste > 1 ? 's' : ''} non affichée${reste > 1 ? 's' : ''}`
+            ? `${CENTRALE_SLOTS} centrales les plus puissantes · ${reste} autre${reste > 1 ? 's' : ''} non affichée${reste > 1 ? 's' : ''}`
             : `${toutes.length} centrale${toutes.length > 1 ? 's' : ''} dans cette région`;
     }
 
@@ -2728,7 +2809,12 @@ function afficherRegion(region) {
     grid.innerHTML = top.map((c, i) => `
         <div class="col-12 col-md-6 col-xl-4">
             <div class="card" style="padding:12px">
-                <div style="font-size:0.8rem; color:var(--text-secondary)">${c.nom}</div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px">
+                    <span style="font-size:0.8rem; color:var(--text-secondary)">${c.nom}</span>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap">
+                        ${c.puissance !== null ? c.puissance.toLocaleString('fr-CA') + ' MW' : 'puissance n.d.'}
+                    </span>
+                </div>
                 <div style="font-size:1.15rem; font-weight:600; color:${c.actuel > 0 ? '#27ae60' : '#95a5a6'}">
                     ${Math.round(c.actuel).toLocaleString('fr-CA')} <small style="font-weight:400">m³/s</small>
                 </div>
