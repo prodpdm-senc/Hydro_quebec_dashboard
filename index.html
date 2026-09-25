@@ -398,6 +398,18 @@
     <!-- CONTENT -->
     <div id="content" style="display:none">
 
+        <!-- HORIZON D'AFFICHAGE -->
+        <div class="d-flex justify-content-center align-items-center gap-2 mb-3" id="horizonBar">
+            <span style="font-size:0.82rem; opacity:0.85">Afficher</span>
+            <select id="horizonSelect" class="form-select form-select-sm" style="width:auto">
+                <option value="7" selected>7 derniers jours</option>
+                <option value="14">14 derniers jours</option>
+                <option value="30">30 derniers jours</option>
+                <option value="0">tout l'historique</option>
+            </select>
+            <span id="horizonNote" style="font-size:0.78rem; opacity:0.6"></span>
+        </div>
+
         <!-- TABS NAV -->
         <ul class="nav nav-pills justify-content-center mb-3" id="mainTabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-canada"     id="btn-canada">🇨🇦 Canada</button></li>
@@ -1026,6 +1038,25 @@ function fmtDate(d) { return new Date(d).toLocaleString('fr-CA',{month:'short',d
 // ─────────────────────────────────────────────────────────────────────────────
 const ARCHIVE_HQ = 'data/hq';
 
+// La collecte, elle, ne s'arrête pas : data/hq garde 90 jours et data/quebec
+// deux ans. L'horizon ne borne que l'affichage, sans quoi les graphiques
+// deviendraient illisibles après quelques semaines d'absence.
+let HORIZON_JOURS = 7;
+
+// Borner en durée et non en nombre de points : les trois séries n'ont pas la
+// même résolution, et un `slice(-672)` commun donnait 7 jours de demande
+// (15 min), 14 de production (30 min) et 28 d'échanges (horaire).
+function limiterHorizon(points) {
+    // Le flux des échanges publie des créneaux à venir, et l'archive les a
+    // recopiés : sans borne haute, la courbe se prolonge dans demain.
+    const maintenant = Date.now();
+    const depuis = HORIZON_JOURS ? maintenant - HORIZON_JOURS * 864e5 : -Infinity;
+    return points.filter(p => {
+        const t = new Date(p.date).getTime();
+        return t >= depuis && t <= maintenant;
+    });
+}
+
 // data/hq range chaque journée en colonnes : un tableau d'heures locales
 // "HH:MM" et un tableau parallèle par grandeur. On les recompose dans la forme
 // du flux direct, seule connue du reste du tableau de bord.
@@ -1035,7 +1066,7 @@ const ARCHIVE_BLOCS = {
     echanges:   { bloc: 'exchange',   forme: ligne => ligne }
 };
 
-async function chargerArchive(domaine, joursVoulus = 8) {
+async function chargerArchive(domaine, joursVoulus = (HORIZON_JOURS || 90) + 1) {
     const spec = ARCHIVE_BLOCS[domaine];
     if (!spec) return [];
 
@@ -1102,7 +1133,7 @@ async function loadDemandTabWithHistory() {
 
         const now = new Date();
         const direct = json.details.filter(r => new Date(r.date) <= now);
-        store.demand = fusionnerArchive(await chargerArchive('demande'), direct).slice(-672);
+        store.demand = limiterHorizon(fusionnerArchive(await chargerArchive('demande'), direct));
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.demand.map(d => ({ type: "demand", date: d.date, valeurs: d.valeurs })));
 
@@ -1137,9 +1168,9 @@ async function loadProductionTabWithHistory() {
 
         const now = new Date();
         const direct = json.details.filter(r => new Date(r.date) <= now && totalMW(r.valeurs) > 0);
-        store.production = fusionnerArchive(await chargerArchive('production'), direct)
-            .filter(r => totalMW(r.valeurs) > 0)
-            .slice(-672);
+        store.production = limiterHorizon(
+            fusionnerArchive(await chargerArchive('production'), direct)
+                .filter(r => totalMW(r.valeurs) > 0));
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.production.map(d => ({ type: "production", date: d.date, valeurs: d.valeurs })));
 
@@ -1289,8 +1320,8 @@ async function loadExchangeTabWithHistory() {
 
         // arr est trié du plus récent au plus ancien ; l'archive et le reste du
         // tableau de bord travaillent en ordre chronologique.
-        store.exchange = fusionnerArchive(await chargerArchive('echanges'), [...arr].reverse())
-            .slice(-672);
+        store.exchange = limiterHorizon(
+            fusionnerArchive(await chargerArchive('echanges'), [...arr].reverse()));
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.exchange.map(d => ({ type: "exchange", date: d.date, valeurs: d })));
 
@@ -3368,6 +3399,52 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  HORIZON D'AFFICHAGE
+// ─────────────────────────────────────────────────────────────────────────────
+function redessinerOngletActif() {
+    const actif = document.querySelector('.nav-link.active')?.id;
+    if (actif === 'btn-analysis')      refreshAnalysisTab();
+    else if (actif === 'btn-canada')   loadCanadaTab();
+    else if (actif === 'btn-nuclear')  loadNuclearTab();
+    else if (actif === 'btn-ontario')  loadOntarioTab();
+    else if (actif === 'btn-reservoirs') loadReservoirsData();
+}
+
+function decrireHorizon() {
+    const note = document.getElementById('horizonNote');
+    if (!note) return;
+    const etendue = serie => {
+        if (!serie.length) return 0;
+        const d = serie.map(p => new Date(p.date).getTime());
+        return (Math.max(...d) - Math.min(...d)) / 864e5;
+    };
+    const jours = Math.max(etendue(store.demand), etendue(store.production), etendue(store.exchange));
+    note.textContent = jours >= 1 ? `· ${jours.toFixed(1)} j chargés` : '';
+}
+
+async function changerHorizon(jours) {
+    HORIZON_JOURS = jours;
+    const select = document.getElementById('horizonSelect');
+    if (select) select.disabled = true;
+    try {
+        await Promise.all([
+            loadDemandTabWithHistory(),
+            loadProductionTabWithHistory(),
+            loadExchangeTabWithHistory()
+        ]);
+        redessinerOngletActif();
+        decrireHorizon();
+        log(`🔭 Horizon: ${jours ? jours + ' j' : 'tout'}`);
+    } finally {
+        if (select) select.disabled = false;
+    }
+}
+
+document.getElementById('horizonSelect')?.addEventListener('change', e => {
+    changerHorizon(parseInt(e.target.value, 10));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  INIT — demand is critical, rest loads lazily
 // ─────────────────────────────────────────────────────────────────────────────
 (async () => {
@@ -3384,6 +3461,7 @@ setInterval(() => {
         await loadCanadaTab();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
+        decrireHorizon();
         log('✅ Dashboard prêt');
     } catch(err) {
         document.getElementById('loading').innerHTML =
