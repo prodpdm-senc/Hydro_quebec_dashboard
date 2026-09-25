@@ -1015,50 +1015,51 @@ function fmtDate(d) { return new Date(d).toLocaleString('fr-CA',{month:'short',d
 //  DONNÉES DE DEMANDE (aucun onglet dédié — alimente l'onglet Analyse HQ)
 // ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
-//  ARCHIVE QUÉBEC — mémoire au-delà de la fenêtre des sources
+//  ARCHIVE — mémoire au-delà de la fenêtre des sources
 //
 //  Les flux d'Hydro-Québec ne gardent que 48 h pour la demande et 24 h pour la
-//  production et les échanges. Le sélecteur « 7 jours » ne pouvait donc rien
-//  montrer de plus que le bouton « 48h ». GitHub Actions archive chaque journée
-//  dans data/quebec/, que Pages et le serveur local servent tous deux en
-//  chemin relatif — aucun proxy nécessaire.
+//  production et les échanges, et l'archive officielle s'arrête au 1er janvier
+//  2025 : sans copie locale, une journée sortie de la fenêtre est perdue.
+//  update_hq_history.py en archive une copie dans data/hq/ toutes les 30 min.
+//  Pages et le serveur local servent tous deux ces fichiers au même chemin
+//  relatif, donc aucun proxy n'intervient.
 // ─────────────────────────────────────────────────────────────────────────────
-const ARCHIVE_BASE = 'data/quebec';
+const ARCHIVE_HQ = 'data/hq';
 
-// Remet un point d'archive dans la forme que le reste du tableau de bord
-// attend, celle du flux direct.
-const ARCHIVE_FORMES = {
-    demande: p => ({ date: p.t, valeurs: { demandeTotal: p.mw } }),
-    production: p => {
-        const { t, ...valeurs } = p;
-        return { date: t, valeurs };
-    },
-    echanges: p => {
-        const { t, ...champs } = p;
-        return { date: t, ...champs };
-    }
+// data/hq range chaque journée en colonnes : un tableau d'heures locales
+// "HH:MM" et un tableau parallèle par grandeur. On les recompose dans la forme
+// du flux direct, seule connue du reste du tableau de bord.
+const ARCHIVE_BLOCS = {
+    demande:    { bloc: 'demand',     forme: ligne => ({ valeurs: { demandeTotal: ligne.mw } }) },
+    production: { bloc: 'production', forme: ligne => ({ valeurs: ligne }) },
+    echanges:   { bloc: 'exchange',   forme: ligne => ligne }
 };
 
 async function chargerArchive(domaine, joursVoulus = 8) {
+    const spec = ARCHIVE_BLOCS[domaine];
+    if (!spec) return [];
+
     try {
-        const index = await (await fetch(`${ARCHIVE_BASE}/index.json`, { cache: 'no-cache' })).json();
-        const couverture = index.domaines?.[domaine];
-        if (!couverture) return [];
+        const index = await (await fetch(`${ARCHIVE_HQ}/index.json`, { cache: 'no-cache' })).json();
+        const jours = (index.dates || []).slice(-joursVoulus);
 
-        // L'index donne les bornes ; on déduit les journées à demander et on
-        // tolère les trous, une exécution ayant pu être manquée.
-        const jours = [];
-        for (let i = 0; i < joursVoulus; i++) {
-            const jour = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
-            if (jour >= couverture.debut && jour <= couverture.fin) jours.push(jour);
-        }
-
-        const forme = ARCHIVE_FORMES[domaine];
         const fichiers = await Promise.all(jours.map(async jour => {
             try {
-                const res = await fetch(`${ARCHIVE_BASE}/${domaine}/${jour}.json`, { cache: 'no-cache' });
+                const res = await fetch(`${ARCHIVE_HQ}/${jour}.json`, { cache: 'no-cache' });
                 if (!res.ok) return [];
-                return ((await res.json()).points || []).map(forme);
+                const bloc = (await res.json())[spec.bloc];
+                if (!bloc || !Array.isArray(bloc.t)) return [];
+
+                const grandeurs = Object.keys(bloc).filter(c => c !== 't');
+                return bloc.t.map((heure, i) => {
+                    const ligne = {};
+                    grandeurs.forEach(g => {
+                        if (bloc[g][i] !== null && bloc[g][i] !== undefined) ligne[g] = bloc[g][i];
+                    });
+                    // Les heures sont locales, comme celles du flux direct pour
+                    // la demande et la production.
+                    return { date: `${jour}T${heure}:00`, ...spec.forme(ligne) };
+                });
             } catch {
                 return [];
             }
@@ -1077,11 +1078,19 @@ async function chargerArchive(domaine, joursVoulus = 8) {
 
 // Le direct fait foi sur les journées que les deux couvrent : il peut corriger
 // un relevé que l'archive a figé.
+//
+// La clé est l'instant, pas la chaîne : l'archive écrit l'heure locale du
+// Québec alors que le flux des échanges donne de l'UTC explicite, et comparer
+// les textes ferait apparaître chaque relevé deux fois.
 function fusionnerArchive(archive, direct) {
-    const parDate = new Map();
-    archive.forEach(p => parDate.set(p.date, p));
-    direct.forEach(p => parDate.set(p.date, p));
-    return [...parDate.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const parInstant = new Map();
+    const ajouter = p => {
+        const instant = new Date(p.date).getTime();
+        parInstant.set(Number.isNaN(instant) ? p.date : instant, p);
+    };
+    archive.forEach(ajouter);
+    direct.forEach(ajouter);
+    return [...parInstant.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 async function loadDemandTabWithHistory() {

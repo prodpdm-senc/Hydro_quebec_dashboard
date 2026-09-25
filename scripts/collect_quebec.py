@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-Collecte les données québécoises d'Hydro-Québec dans des fichiers journaliers.
+Archive les débits turbinés et les niveaux de réservoirs, par journée.
 
 Raison d'être : les sources ne gardent qu'une fenêtre glissante très courte —
 48 h pour la demande, 24 h pour la production et les échanges — et l'archive
 officielle s'arrête au 1er janvier 2025. Une journée qui sort de la fenêtre sans
 avoir été enregistrée est définitivement perdue.
 
-Le proxy local écrivait déjà ces fichiers, mais seulement quand quelqu'un
-ouvrait le tableau de bord sur la machine d'Alex. Ce script tourne dans GitHub
-Actions, comme le collecteur IESO.
+La demande, la production et les échanges sont couverts par
+update_hq_history.py, qui écrit dans data/hq/. Ce script ne prend que les deux
+séries qu'il ne couvre pas : débits turbinés par centrale et niveaux de
+réservoirs. Leur fenêtre source est de 7 jours, d'où une seule exécution par
+jour.
 
 Chaque relevé est rangé dans le fichier du jour correspondant à son propre
 horodatage, en heure de l'Est. Une exécution peut donc remplir plusieurs
@@ -34,9 +36,6 @@ HQ = "https://www.hydroquebec.com/data/documents-donnees/donnees-ouvertes/json"
 # Les séries volumineuses sont conservées moins longtemps : les niveaux pèsent
 # environ 300 Ko par jour contre quelques kilo-octets pour la demande.
 RETENTION_JOURS = {
-    "demande": 730,
-    "production": 730,
-    "echanges": 730,
     "turbine": 730,
     "niveaux": 730,
 }
@@ -201,48 +200,6 @@ def deserialiser(domaine, contenu):
 
 # ── Collecteurs ──────────────────────────────────────────────────────────────
 
-def collecter_demande():
-    donnees = telecharger(f"{HQ}/demande.json")
-    return [
-        {"t": d["date"], "mw": nombre(d.get("valeurs", {}).get("demandeTotal"))}
-        for d in donnees.get("details", [])
-        if d.get("valeurs", {}).get("demandeTotal") is not None
-    ]
-
-
-def collecter_production():
-    donnees = telecharger(f"{HQ}/production.json")
-    releves = []
-    for d in donnees.get("details", []):
-        valeurs = d.get("valeurs") or {}
-        if not valeurs:
-            continue
-        releve = {"t": d["date"]}
-        for champ in ("total", "hydraulique", "eolien", "solaire", "thermique", "autres"):
-            valeur = nombre(valeurs.get(champ))
-            if valeur is not None:
-                releve[champ] = valeur
-        releves.append(releve)
-    return releves
-
-
-def collecter_echanges():
-    lignes = export_ods("importations-exportations-avec-transits")
-    releves = []
-    for ligne in lignes:
-        if not ligne.get("date"):
-            continue
-        releve = {"t": ligne["date"]}
-        for champ, valeur in ligne.items():
-            if champ == "date":
-                continue
-            nombre_valeur = nombre(valeur)
-            if nombre_valeur is not None:
-                releve[champ] = nombre_valeur
-        releves.append(releve)
-    return releves
-
-
 def collecter_turbine():
     lignes = export_ods(
         "donnees-hydrometriques",
@@ -291,10 +248,11 @@ def collecter_niveaux():
     return releves
 
 
+# La demande, la production et les échanges sont déjà archivés dans data/hq/
+# par update_hq_history.py, toutes les 30 minutes et depuis le 21 septembre.
+# Ce collecteur ne couvre que ce qui manquait : les débits turbinés par
+# centrale et les niveaux de réservoirs.
 COLLECTEURS = {
-    "demande": collecter_demande,
-    "production": collecter_production,
-    "echanges": collecter_echanges,
     "turbine": collecter_turbine,
     "niveaux": collecter_niveaux,
 }
