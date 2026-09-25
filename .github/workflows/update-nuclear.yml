@@ -8,6 +8,11 @@ on:
   push:
     branches: [main]
 
+# File partagée avec les autres collecteurs, qui poussent sur la même branche.
+concurrency:
+  group: collecte-donnees
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -185,7 +190,15 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/nuclear.json data/history.json
-          git diff --staged --quiet && echo "No changes." || (
-            git commit -m "data: nuclear update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            git push
-          )
+          if git diff --staged --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git commit -m "data: nuclear update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Une exécution concurrente peut avoir poussé entre-temps.
+          for essai in 1 2 3; do
+            git pull --rebase --quiet origin main && git push && exit 0
+            echo "Push refusé (essai $essai), nouvelle tentative."
+            sleep 5
+          done
+          exit 1
