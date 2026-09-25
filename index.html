@@ -1014,6 +1014,76 @@ function fmtDate(d) { return new Date(d).toLocaleString('fr-CA',{month:'short',d
 // ─────────────────────────────────────────────────────────────────────────────
 //  DONNÉES DE DEMANDE (aucun onglet dédié — alimente l'onglet Analyse HQ)
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  ARCHIVE QUÉBEC — mémoire au-delà de la fenêtre des sources
+//
+//  Les flux d'Hydro-Québec ne gardent que 48 h pour la demande et 24 h pour la
+//  production et les échanges. Le sélecteur « 7 jours » ne pouvait donc rien
+//  montrer de plus que le bouton « 48h ». GitHub Actions archive chaque journée
+//  dans data/quebec/, que Pages et le serveur local servent tous deux en
+//  chemin relatif — aucun proxy nécessaire.
+// ─────────────────────────────────────────────────────────────────────────────
+const ARCHIVE_BASE = 'data/quebec';
+
+// Remet un point d'archive dans la forme que le reste du tableau de bord
+// attend, celle du flux direct.
+const ARCHIVE_FORMES = {
+    demande: p => ({ date: p.t, valeurs: { demandeTotal: p.mw } }),
+    production: p => {
+        const { t, ...valeurs } = p;
+        return { date: t, valeurs };
+    },
+    echanges: p => {
+        const { t, ...champs } = p;
+        return { date: t, ...champs };
+    }
+};
+
+async function chargerArchive(domaine, joursVoulus = 8) {
+    try {
+        const index = await (await fetch(`${ARCHIVE_BASE}/index.json`, { cache: 'no-cache' })).json();
+        const couverture = index.domaines?.[domaine];
+        if (!couverture) return [];
+
+        // L'index donne les bornes ; on déduit les journées à demander et on
+        // tolère les trous, une exécution ayant pu être manquée.
+        const jours = [];
+        for (let i = 0; i < joursVoulus; i++) {
+            const jour = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+            if (jour >= couverture.debut && jour <= couverture.fin) jours.push(jour);
+        }
+
+        const forme = ARCHIVE_FORMES[domaine];
+        const fichiers = await Promise.all(jours.map(async jour => {
+            try {
+                const res = await fetch(`${ARCHIVE_BASE}/${domaine}/${jour}.json`, { cache: 'no-cache' });
+                if (!res.ok) return [];
+                return ((await res.json()).points || []).map(forme);
+            } catch {
+                return [];
+            }
+        }));
+
+        const points = fichiers.flat();
+        log(`📚 Archive ${domaine}: ${points.length} points sur ${jours.length} j`);
+        return points;
+    } catch (err) {
+        // L'archive est un complément : son absence ne doit pas priver
+        // l'utilisateur des données en direct.
+        log(`⚠️ Archive ${domaine} indisponible: ${err.message}`, true);
+        return [];
+    }
+}
+
+// Le direct fait foi sur les journées que les deux couvrent : il peut corriger
+// un relevé que l'archive a figé.
+function fusionnerArchive(archive, direct) {
+    const parDate = new Map();
+    archive.forEach(p => parDate.set(p.date, p));
+    direct.forEach(p => parDate.set(p.date, p));
+    return [...parDate.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
 async function loadDemandTabWithHistory() {
     log('🔄 Chargement Demande');
     try {
@@ -1022,8 +1092,8 @@ async function loadDemandTabWithHistory() {
         if (!json.details?.length) throw new Error('Aucune donnée demande');
 
         const now = new Date();
-        // Store up to 7 days (672 pts at 15-min intervals)
-        store.demand = json.details.filter(r => new Date(r.date) <= now).slice(-672);
+        const direct = json.details.filter(r => new Date(r.date) <= now);
+        store.demand = fusionnerArchive(await chargerArchive('demande'), direct).slice(-672);
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.demand.map(d => ({ type: "demand", date: d.date, valeurs: d.valeurs })));
 
@@ -1057,13 +1127,9 @@ async function loadProductionTabWithHistory() {
         if (!json.details?.length) throw new Error('Aucune donnée production');
 
         const now = new Date();
-        // Store up to 7 days, filter out zero/future points
-        store.production = json.details
-            .filter(r => {
-                const v = r.valeurs;
-                return new Date(r.date) <= now &&
-                    totalMW(v) > 0;
-            })
+        const direct = json.details.filter(r => new Date(r.date) <= now && totalMW(r.valeurs) > 0);
+        store.production = fusionnerArchive(await chargerArchive('production'), direct)
+            .filter(r => totalMW(r.valeurs) > 0)
             .slice(-672);
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.production.map(d => ({ type: "production", date: d.date, valeurs: d.valeurs })));
@@ -1212,8 +1278,10 @@ async function loadExchangeTabWithHistory() {
         set('e-ny', Math.abs(Math.round(rec.exportations_newyork   ||0)).toLocaleString('fr-CA') + ' MW');
         set('e-on', Math.abs(Math.round(rec.exportations_ontario   ||0)).toLocaleString('fr-CA') + ' MW');
 
-        // Store up to 7 days (newest-first sorted, then reverse for chronological order)
-        store.exchange = arr.slice(0, 672).reverse();
+        // arr est trié du plus récent au plus ancien ; l'archive et le reste du
+        // tableau de bord travaillent en ordre chronologique.
+        store.exchange = fusionnerArchive(await chargerArchive('echanges'), [...arr].reverse())
+            .slice(-672);
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.exchange.map(d => ({ type: "exchange", date: d.date, valeurs: d })));
 
