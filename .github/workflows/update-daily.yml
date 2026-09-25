@@ -29,6 +29,13 @@ jobs:
           import os
           import glob
           from datetime import datetime, timezone, timedelta
+          from zoneinfo import ZoneInfo
+
+          # IESO publie ses rapports par date de l'Est. Dater la requête en UTC
+          # faisait réclamer le lendemain entre 00 h et 04 h UTC — d'où des
+          # exécutions en échec chaque nuit — et rangeait les relevés sous la
+          # mauvaise journée.
+          EST = ZoneInfo('America/Toronto')
 
           ns = 'http://www.theIMO.com/schema'
 
@@ -119,19 +126,37 @@ jobs:
                   'fuels':   fuels_out,
               }
 
-          # ── Fetch today's data ──────────────────────────────────────────────
-          now_utc   = datetime.now(timezone.utc)
-          today_str = now_utc.strftime('%Y%m%d')
-          today_iso = now_utc.strftime('%Y-%m-%d')
+          # ── Fetch today's and yesterday's data ──────────────────────────────
+          # On reprend aussi la veille : la dernière exécution d'une journée de
+          # l'Est tombe vers 22 h, donc ses deux dernières heures ne sont
+          # publiées qu'après coup. Sans ce rattrapage, chaque journée restait
+          # amputée — 16 à 18 heures sur 24 dans les fichiers existants.
+          now_utc = datetime.now(timezone.utc)
+          now_est = datetime.now(EST)
 
-          daily = fetch_day(today_str)
-          if daily:
-              out_file = f'data/daily/{today_iso}.json'
+          for decalage in (1, 0):
+              jour     = now_est - timedelta(days=decalage)
+              jour_str = jour.strftime('%Y%m%d')
+              jour_iso = jour.strftime('%Y-%m-%d')
+
+              daily = fetch_day(jour_str)
+              if not daily:
+                  continue
+
+              out_file = f'data/daily/{jour_iso}.json'
+
+              # Ne pas écraser une journée déjà plus complète : un rapport
+              # peut être republié tronqué.
+              if os.path.exists(out_file):
+                  with open(out_file) as f:
+                      ancien = json.load(f)
+                  if len(ancien.get('hours', [])) > len(daily['hours']):
+                      print(f"  Kept {out_file}: {len(ancien['hours'])}h > {len(daily['hours'])}h")
+                      continue
+
               with open(out_file, 'w') as f:
                   json.dump(daily, f, separators=(',', ':'))
-              total_mw = sum(
-                  arr[-1] for arr in daily['fuels'].values() if arr
-              )
+              total_mw = sum(arr[-1] for arr in daily['fuels'].values() if arr)
               print(
                   f"  Saved {out_file}: {len(daily['hours'])}h · "
                   f"{len(daily['fuels'])} fuels · {total_mw} MW (last hour)"

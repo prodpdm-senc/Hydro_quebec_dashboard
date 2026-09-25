@@ -1,0 +1,67 @@
+name: Update Québec Energy Data
+
+# Les sources d'Hydro-Québec ne gardent qu'une fenêtre glissante : 48 h pour la
+# demande, 24 h pour la production et les échanges. L'archive officielle
+# s'arrête au 1er janvier 2025. Une journée qui sort de la fenêtre sans avoir
+# été enregistrée est perdue pour de bon — c'est ce qui est arrivé au 23
+# septembre 2026.
+#
+# Deux cadences : les séries à fenêtre courte sont relevées toutes les 6 h, ce
+# qui laisse quatre passages de marge sur la plus serrée (24 h). Les débits
+# turbinés et les niveaux ont une fenêtre de 7 jours et des charges utiles bien
+# plus lourdes, donc une fois par jour suffit largement.
+on:
+  schedule:
+    - cron: '20 */6 * * *'   # demande, production, échanges
+    - cron: '40 7 * * *'     # débits turbinés et niveaux, en plus
+  workflow_dispatch:
+    inputs:
+      domaines:
+        description: 'Domaines à collecter (vide = tous)'
+        required: false
+        default: ''
+
+concurrency:
+  group: collecte-quebec
+  cancel-in-progress: false
+
+jobs:
+  collecte:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Choisir les domaines selon la cadence
+        id: choix
+        run: |
+          if [ -n "${{ github.event.inputs.domaines }}" ]; then
+            echo "domaines=${{ github.event.inputs.domaines }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = '20 */6 * * *' ]; then
+            echo "domaines=demande production echanges" >> "$GITHUB_OUTPUT"
+          else
+            echo "domaines=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collecter
+        run: python3 scripts/collect_quebec.py ${{ steps.choix.outputs.domaines }}
+
+      - name: Commiter si les données ont changé
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/quebec/
+          if git diff --staged --quiet; then
+            echo "Rien de neuf."
+            exit 0
+          fi
+          git commit -m "data: collecte Québec $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Le collecteur IESO pousse sur la même branche toutes les 2 h.
+          for essai in 1 2 3; do
+            git pull --rebase --quiet origin main && git push && exit 0
+            echo "Push refusé (essai $essai), nouvelle tentative."
+            sleep 5
+          done
+          exit 1
