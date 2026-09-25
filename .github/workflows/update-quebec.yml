@@ -21,8 +21,9 @@ on:
         required: false
         default: ''
 
+# File partagée avec le collecteur IESO, qui pousse sur la même branche.
 concurrency:
-  group: collecte-quebec
+  group: collecte-donnees
   cancel-in-progress: false
 
 jobs:
