@@ -3,11 +3,18 @@ name: Update Turbined Flow and Reservoir Levels
 # La demande, la production et les échanges sont archivés par
 # update-hydro-quebec.yml dans data/hq/, toutes les 30 minutes. Ce workflow ne
 # couvre que les deux séries qu'il laisse de côté : les débits turbinés par
-# centrale et les niveaux de réservoirs. Leur fenêtre source est de 7 jours et
-# leurs charges utiles sont lourdes, donc une exécution par jour suffit.
+# centrale et les niveaux de réservoirs.
+#
+# Leur fenêtre source est de 7 jours, donc une exécution quotidienne suffirait
+# en théorie. En pratique GitHub abandonne l'essentiel des exécutions
+# planifiées — mesuré le 2026-09-25 : 6 sur 48 attendues pour les crons de 30
+# minutes, avec des trous jusqu'à 5 h 47. Une planification quotidienne
+# risquerait donc de sauter plusieurs jours d'affilée. Quatre tentatives par
+# jour ramènent l'espérance à au moins une exécution quotidienne, et chaque
+# passage rattrape les journées manquées puisqu'il relit toute la fenêtre.
 on:
   schedule:
-    - cron: '40 7 * * *'
+    - cron: '40 */6 * * *'
   workflow_dispatch:
     inputs:
       domaines:
