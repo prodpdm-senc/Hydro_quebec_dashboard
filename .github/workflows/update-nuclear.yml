@@ -31,7 +31,8 @@ jobs:
           import xml.etree.ElementTree as ET
           import json
           import os
-          from datetime import datetime, timezone
+          from datetime import datetime, timezone, timedelta
+          import glob
 
           url = 'https://reports-public.ieso.ca/public/GenOutputCapability/PUB_GenOutputCapability.xml'
           ns  = 'http://www.theIMO.com/schema'
@@ -126,23 +127,25 @@ jobs:
           except Exception as e:
               print(f"❌ Could not fetch Ontario total: {e}")
 
-          # ── history.json : rolling 7 jours, résolution 30 min ───────────────
+          # ── Historique en fichiers journaliers ─────────────────────────────
+          # data/history.json était réécrit en entier à chaque passage : 168 Ko
+          # par version, 87 % de la croissance de l'historique git du dépôt à
+          # lui seul. Un fichier par journée se fige une fois la journée passée,
+          # donc seule la journée courante est réécrite.
+          #
+          # Note : le « rolling 7 jours » d'origine n'a jamais tenu. GitHub
+          # n'exécute qu'environ 8 des 48 passages planifiés, donc les 336
+          # entrées conservées couvraient en réalité près de 40 jours.
+          from zoneinfo import ZoneInfo
+          EST = ZoneInfo('America/Toronto')
+          RETENTION_JOURS = 90
+
           PLANT_GROUPS = {
               'bruce':      ['BRUCEA-G1','BRUCEA-G2','BRUCEA-G3','BRUCEA-G4',
                              'BRUCEB-G5','BRUCEB-G6','BRUCEB-G7','BRUCEB-G8'],
               'darlington': ['DARLINGTON-G1','DARLINGTON-G2','DARLINGTON-G3','DARLINGTON-G4'],
               'pickering':  ['PICKERINGB-G5','PICKERINGB-G6','PICKERINGB-G7','PICKERINGB-G8']
           }
-
-          history_file = 'data/history.json'
-          if os.path.exists(history_file):
-              with open(history_file) as f:
-                  try:
-                      history = json.load(f)
-                  except Exception:
-                      history = {'updated': '', 'data': []}
-          else:
-              history = {'updated': '', 'data': []}
 
           # Build current snapshot (last known MW per plant + individual units)
           snapshot = {'ts': nuclear['updated'], 'total': 0, 'plants': {}}
@@ -159,27 +162,67 @@ jobs:
               snapshot[plant] = plant_total  # Keep for backward compat
               snapshot['total'] += plant_total
 
-          # Add Ontario total output if available, else use known value
           if ontario_total is not None:
               snapshot['ontario_total'] = ontario_total
           else:
-              # Fallback: known recent Ontario grid total (nuclear + other sources)
-              # TODO: Fix IESO fetch to get real-time data
               snapshot['ontario_total'] = 17507
               print(f"ℹ️ Using fallback Ontario total: 17507 MW")
 
-          history['data'].append(snapshot)
-          history['updated'] = snapshot['ts']
+          os.makedirs('data/nuclear', exist_ok=True)
+          maintenant = datetime.now(timezone.utc)
+          maj = maintenant.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-          # Keep last 336 entries = 7 days × 48 runs/day
-          MAX_ENTRIES = 336
-          if len(history['data']) > MAX_ENTRIES:
-              history['data'] = history['data'][-MAX_ENTRIES:]
+          ts_txt = str(snapshot['ts']).replace('Z', '+00:00')
+          try:
+              instant = datetime.fromisoformat(ts_txt)
+          except ValueError:
+              instant = maintenant
+          instant = instant.astimezone(EST) if instant.tzinfo else instant.replace(tzinfo=EST)
+          jour = instant.strftime('%Y-%m-%d')
 
-          with open(history_file, 'w') as f:
-              json.dump(history, f, separators=(',', ':'))
+          chemin = f'data/nuclear/{jour}.json'
+          if os.path.exists(chemin):
+              with open(chemin) as f:
+                  try:
+                      contenu = json.load(f)
+                  except Exception:
+                      contenu = {'jour': jour, 'data': []}
+          else:
+              contenu = {'jour': jour, 'data': []}
 
-          status_msg = f"history.json saved: {len(history['data'])} entries | nuclear {snapshot['total']} MW"
+          # `ts` est l'heure de la requête, pas celle de publication d'IESO :
+          # il est neuf à chaque passage et ne peut pas servir à dédoublonner.
+          # On compare donc les valeurs elles-mêmes — inutile d'ajouter un
+          # relevé identique au précédent, et de réécrire la journée pour rien.
+          def sans_horodatage(s):
+              return {k: v for k, v in s.items() if k != 'ts'}
+
+          dernier = contenu['data'][-1] if contenu['data'] else None
+          if dernier is not None and sans_horodatage(dernier) == sans_horodatage(snapshot):
+              print(f"ℹ️ Valeurs inchangées depuis {dernier['ts']}, journée non réécrite.")
+          else:
+              contenu['data'].append(snapshot)
+              contenu['data'].sort(key=lambda s: str(s.get('ts', '')))
+              contenu['maj'] = maj
+              with open(chemin, 'w') as f:
+                  json.dump(contenu, f, separators=(',', ':'))
+
+          # latest.json : ce dont l'onglet Canada a besoin, sans lire l'historique
+          with open('data/nuclear/latest.json', 'w') as f:
+              json.dump({'maj': maj, **snapshot}, f, separators=(',', ':'))
+
+          limite = (maintenant.astimezone(EST) - timedelta(days=RETENTION_JOURS)).strftime('%Y-%m-%d')
+          for f_jour in glob.glob('data/nuclear/????-??-??.json'):
+              if os.path.basename(f_jour)[:-5] < limite:
+                  os.remove(f_jour)
+                  print(f"  purgé {f_jour}")
+
+          jours = sorted(os.path.basename(f)[:-5]
+                         for f in glob.glob('data/nuclear/????-??-??.json'))
+          with open('data/nuclear/index.json', 'w') as f:
+              json.dump({'maj': maj, 'dates': jours}, f)
+
+          status_msg = f"data/nuclear/{jour}.json: {len(contenu['data'])} relevés | nuclear {snapshot['total']} MW"
           if ontario_total is not None:
               status_msg += f" | Ontario total {ontario_total} MW"
           print(status_msg)
@@ -189,7 +232,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/nuclear.json data/history.json
+          git add data/nuclear.json data/nuclear/
           if git diff --staged --quiet; then
             echo "No changes."
             exit 0
