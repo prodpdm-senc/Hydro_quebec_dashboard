@@ -50,8 +50,15 @@ jobs:
           git commit -m "data: débits turbinés et niveaux $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           # Le collecteur IESO pousse sur la même branche toutes les 2 h.
           for essai in 1 2 3; do
-            git pull --rebase --quiet origin main && git push && exit 0
+            if git pull --rebase --quiet origin main && git push; then exit 0; fi
+            # Un rebase en conflit laisse l'arbre à moitié fusionné : sans
+            # abandon explicite, les essais suivants échouent aussitôt sur
+            # « unmerged files » au lieu de retenter quoi que ce soit.
+            git rebase --abort 2>/dev/null || true
             echo "Push refusé (essai $essai), nouvelle tentative."
             sleep 5
           done
+          # Chaque passage relit toute la fenêtre source : ces relevés seront
+          # réécrits au prochain. On échoue visiblement plutôt qu'en silence.
+          echo "Abandon après 3 essais — le prochain passage réécrira ces données."
           exit 1
