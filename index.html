@@ -71,7 +71,16 @@
             font-size: 1.1rem;
             transition: all 0.2s ease;
         }
-        .header-btn:hover { background: rgba(255,255,255,0.35); transform: scale(1.05); }
+        /* Les effets de survol ne s'appliquent qu'aux appareils qui survolent
+           vraiment. Sur tactile, iOS conserve le :hover après un appui : sans
+           cette garde, les cartes restent décalées et la navigation paraît
+           sauter toute seule. */
+        @media (hover: hover) {
+            .header-btn:hover { background: rgba(255,255,255,0.35); transform: scale(1.05); }
+            .card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+            .nav-pills .nav-link:hover { background: #fff; transform: translateY(-2px); }
+            .province-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+            }
         .card {
             background: var(--card-bg);
             border-radius: 12px;
@@ -80,7 +89,6 @@
             transition: background 0.3s ease;
             margin-bottom: 20px;
         }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
         .stat-card { text-align: center; padding: 20px; }
         .stat-value { font-size: 2.2rem; font-weight: bold; margin: 8px 0; color: var(--text-primary); }
         .stat-label { color: var(--text-secondary); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -98,7 +106,6 @@
             border-radius: 10px;
             transition: all 0.25s ease;
         }
-        .nav-pills .nav-link:hover { background: #fff; transform: translateY(-2px); }
         .nav-pills .nav-link.active {
             background: #fff;
             color: var(--pill-active-text);
@@ -133,6 +140,19 @@
             transition: background 0.2s;
         }
         .debug-toggle:hover { background: rgba(31,53,196,0.22); }
+        /* Barre d'horizon — posée sur le dégradé, donc hors de toute carte :
+           la couleur du texte doit être demandée explicitement, sinon elle
+           retombe sur le noir par défaut du navigateur. */
+        #horizonBar { color: var(--text-light); }
+        #horizonBar .horizon-mot { font-size: 0.82rem; opacity: 0.9; }
+        #horizonBar #horizonLabel { font-size: 0.9rem; min-width: 5.5em; font-weight: 700; }
+        #horizonBar #horizonNote  { font-size: 0.78rem; opacity: 0.75; }
+        #horizonRange {
+            width: min(300px, 45vw);
+            accent-color: var(--hq-orange);   /* seule couleur vive de la charte sur fond marine */
+            cursor: pointer;
+            height: 22px;                      /* cible tactile confortable */
+        }
         /* Cartes de tendance des réservoirs */
         .trend-card { padding: 18px; height: 100%; }
         .trend-region { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
@@ -173,7 +193,6 @@
             border: 1px solid var(--border-color);
             transition: all 0.2s;
         }
-        .province-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
         .province-code { font-size: 1.7rem; font-weight: 800; letter-spacing: -1px; color: var(--text-primary); line-height: 1; }
         .province-name { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
         .province-cap  { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
@@ -291,18 +310,23 @@
             #mainTabs .nav-item { flex: 0 0 auto; }
             #mainTabs .nav-link {
                 font-size: 0.78rem;
-                padding: 6px 10px;
+                padding: 8px 12px;      /* cible tactile plus haute */
                 margin: 0 2px;
                 white-space: nowrap;
             }
-            /* No hover lift on touch */
-            #mainTabs .nav-link:hover { transform: none; }
+
+            /* Le curseur prend toute la largeur : à 45vw il ne restait que
+               ~13 px par cran sur un téléphone, impossible à viser au doigt. */
+            #horizonBar { gap: 6px !important; }
+            #horizonRange { width: 100%; order: 3; }
+            #horizonBar .horizon-mot { order: 1; }
+            #horizonBar #horizonLabel { order: 2; min-width: 0; }
+            #horizonBar #horizonNote { order: 4; width: 100%; text-align: center; }
 
             /* Period bar */
 
             /* Cards */
             .card { margin-bottom: 12px; border-radius: 10px; }
-            .card:hover { transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 
             /* Stat cards */
             .stat-card { padding: 12px 8px; }
@@ -338,7 +362,6 @@
                 grid-template-columns: 1fr;
                 gap: 10px;
             }
-            .nuclear-card:hover { transform: none; }
             .plant-chart-container { height: 230px; }
 
             /* Ontario chart header — stack vertically */
@@ -400,11 +423,11 @@
 
         <!-- HORIZON D'AFFICHAGE -->
         <div class="d-flex justify-content-center align-items-center gap-2 mb-3 flex-wrap" id="horizonBar">
-            <span style="font-size:0.82rem; opacity:0.85">Afficher</span>
+            <span class="horizon-mot">Afficher</span>
             <input type="range" id="horizonRange" min="0" max="12" step="1" value="4"
-                   style="width:min(300px,45vw); accent-color:#4a9fd8; cursor:pointer">
-            <strong id="horizonLabel" style="font-size:0.85rem; min-width:5.5em">7 jours</strong>
-            <span id="horizonNote" style="font-size:0.78rem; opacity:0.6"></span>
+                   aria-label="Horizon d'affichage des graphiques">
+            <strong id="horizonLabel">7 jours</strong>
+            <span id="horizonNote"></span>
         </div>
 
         <!-- TABS NAV -->
@@ -3453,6 +3476,15 @@ function afficherReservoir(nom) {
         }
     });
 }
+
+// La bande d'onglets défile horizontalement sur mobile et sa barre de
+// défilement est masquée : sans ce recentrage, on change d'onglet et l'onglet
+// choisi reste hors champ, ce qui donne l'impression que rien n'a bougé.
+// block:'nearest' est essentiel — sans lui, le navigateur fait aussi défiler
+// la page verticalement et la vue saute.
+document.getElementById('mainTabs').addEventListener('shown.bs.tab', e => {
+    e.target.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+});
 
 document.getElementById('btn-nuclear').addEventListener('shown.bs.tab',    () => { loadNuclearTab(); });
 document.getElementById('btn-ontario').addEventListener('shown.bs.tab',    () => { loadOntarioTab(); });
