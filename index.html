@@ -399,14 +399,11 @@
     <div id="content" style="display:none">
 
         <!-- HORIZON D'AFFICHAGE -->
-        <div class="d-flex justify-content-center align-items-center gap-2 mb-3" id="horizonBar">
+        <div class="d-flex justify-content-center align-items-center gap-2 mb-3 flex-wrap" id="horizonBar">
             <span style="font-size:0.82rem; opacity:0.85">Afficher</span>
-            <select id="horizonSelect" class="form-select form-select-sm" style="width:auto">
-                <option value="7" selected>7 derniers jours</option>
-                <option value="14">14 derniers jours</option>
-                <option value="30">30 derniers jours</option>
-                <option value="0">tout l'historique</option>
-            </select>
+            <input type="range" id="horizonRange" min="0" max="12" step="1" value="4"
+                   style="width:min(300px,45vw); accent-color:#4a9fd8; cursor:pointer">
+            <strong id="horizonLabel" style="font-size:0.85rem; min-width:5.5em">7 jours</strong>
             <span id="horizonNote" style="font-size:0.78rem; opacity:0.6"></span>
         </div>
 
@@ -1043,17 +1040,36 @@ const ARCHIVE_HQ = 'data/hq';
 // deviendraient illisibles après quelques semaines d'absence.
 let HORIZON_JOURS = 7;
 
+// Paliers du curseur, en jours ; 0 = tout ce qui est disponible.
+const HORIZON_PALIERS = [1, 2, 3, 5, 7, 10, 14, 21, 30, 45, 60, 90, 0];
+
+// Les séries complètes restent en mémoire pour que déplacer le curseur soit un
+// simple filtrage, sans retoucher au réseau : l'archive fait 4 Ko par jour,
+// donc trois mois tiennent dans quelques centaines de kilo-octets.
+const seriesCompletes = { demande: [], production: [], echanges: [] };
+
 // Borner en durée et non en nombre de points : les trois séries n'ont pas la
 // même résolution, et un `slice(-672)` commun donnait 7 jours de demande
 // (15 min), 14 de production (30 min) et 28 d'échanges (horaire).
-function limiterHorizon(points) {
+function finDeSerie(points) {
+    if (!points || !points.length) return null;
+    return Math.max(...points.map(p => new Date(p.date).getTime()));
+}
+
+function limiterHorizon(points, { ancre = null } = {}) {
     // Le flux des échanges publie des créneaux à venir, et l'archive les a
     // recopiés : sans borne haute, la courbe se prolonge dans demain.
     const maintenant = Date.now();
-    const depuis = HORIZON_JOURS ? maintenant - HORIZON_JOURS * 864e5 : -Infinity;
+
+    // Hydro-Québec publie les débits turbinés avec environ quatre jours de
+    // retard. Fenêtrer depuis « maintenant » viderait complètement ces
+    // graphiques dès qu'on zoome sous cinq jours, alors que les données
+    // existent. On ancre donc la fenêtre sur le dernier relevé de la série.
+    const fin = Math.min(ancre === null ? maintenant : ancre, maintenant);
+    const depuis = HORIZON_JOURS ? fin - HORIZON_JOURS * 864e5 : -Infinity;
     return points.filter(p => {
         const t = new Date(p.date).getTime();
-        return t >= depuis && t <= maintenant;
+        return t >= depuis && t <= fin;
     });
 }
 
@@ -1066,19 +1082,36 @@ const ARCHIVE_BLOCS = {
     echanges:   { bloc: 'exchange',   forme: ligne => ligne }
 };
 
-async function chargerArchive(domaine, joursVoulus = (HORIZON_JOURS || 90) + 1) {
+// Les trois séries lisent les mêmes fichiers journaliers et se chargent en
+// parallèle : sans mise en cache, chaque journée était téléchargée trois fois.
+// On mémorise la promesse, ce qui dédoublonne aussi les appels concurrents.
+const cacheArchive = new Map();
+
+function litArchive(url) {
+    if (!cacheArchive.has(url)) {
+        cacheArchive.set(url, fetch(url, { cache: 'no-cache' })
+            .then(r => (r.ok ? r.json() : null))
+            .catch(() => null));
+    }
+    return cacheArchive.get(url);
+}
+
+// joursVoulus non précisé : on prend tout ce que l'index annonce, puisque le
+// zoom doit pouvoir remonter jusqu'au maximum disponible sans nouvel appel.
+async function chargerArchive(domaine, joursVoulus = Infinity) {
     const spec = ARCHIVE_BLOCS[domaine];
     if (!spec) return [];
 
     try {
-        const index = await (await fetch(`${ARCHIVE_HQ}/index.json`, { cache: 'no-cache' })).json();
-        const jours = (index.dates || []).slice(-joursVoulus);
+        const index = await litArchive(`${ARCHIVE_HQ}/index.json`);
+        const dates = (index && index.dates) || [];
+        const jours = Number.isFinite(joursVoulus) ? dates.slice(-joursVoulus) : dates;
 
         const fichiers = await Promise.all(jours.map(async jour => {
             try {
-                const res = await fetch(`${ARCHIVE_HQ}/${jour}.json`, { cache: 'no-cache' });
-                if (!res.ok) return [];
-                const bloc = (await res.json())[spec.bloc];
+                const contenu = await litArchive(`${ARCHIVE_HQ}/${jour}.json`);
+                if (!contenu) return [];
+                const bloc = contenu[spec.bloc];
                 if (!bloc || !Array.isArray(bloc.t)) return [];
 
                 const grandeurs = Object.keys(bloc).filter(c => c !== 't');
@@ -1133,7 +1166,8 @@ async function loadDemandTabWithHistory() {
 
         const now = new Date();
         const direct = json.details.filter(r => new Date(r.date) <= now);
-        store.demand = limiterHorizon(fusionnerArchive(await chargerArchive('demande'), direct));
+        seriesCompletes.demande = fusionnerArchive(await chargerArchive('demande'), direct);
+        store.demand = limiterHorizon(seriesCompletes.demande);
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.demand.map(d => ({ type: "demand", date: d.date, valeurs: d.valeurs })));
 
@@ -1168,9 +1202,9 @@ async function loadProductionTabWithHistory() {
 
         const now = new Date();
         const direct = json.details.filter(r => new Date(r.date) <= now && totalMW(r.valeurs) > 0);
-        store.production = limiterHorizon(
-            fusionnerArchive(await chargerArchive('production'), direct)
-                .filter(r => totalMW(r.valeurs) > 0));
+        seriesCompletes.production = fusionnerArchive(await chargerArchive('production'), direct)
+            .filter(r => totalMW(r.valeurs) > 0);
+        store.production = limiterHorizon(seriesCompletes.production);
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.production.map(d => ({ type: "production", date: d.date, valeurs: d.valeurs })));
 
@@ -1320,8 +1354,8 @@ async function loadExchangeTabWithHistory() {
 
         // arr est trié du plus récent au plus ancien ; l'archive et le reste du
         // tableau de bord travaillent en ordre chronologique.
-        store.exchange = limiterHorizon(
-            fusionnerArchive(await chargerArchive('echanges'), [...arr].reverse()));
+        seriesCompletes.echanges = fusionnerArchive(await chargerArchive('echanges'), [...arr].reverse());
+        store.exchange = limiterHorizon(seriesCompletes.echanges);
         // Persist to 7-day rolling storage
         StorageManager.saveBatch(store.exchange.map(d => ({ type: "exchange", date: d.date, valeurs: d })));
 
@@ -3274,6 +3308,15 @@ function remplirSelecteurRegions(parRegion) {
     if (regions.length) afficherRegion(regions[0].region);
 }
 
+// Appelé quand l'horizon change : les données sont déjà chargées, on ne fait
+// que redessiner la région et le réservoir courants.
+function redessinerReservoirs() {
+    const region = document.getElementById('r-region')?.value;
+    if (region && hydroData.parRegion[region]) afficherRegion(region);
+    const nom = reservoirChoisi || document.getElementById('r-reservoir')?.value;
+    if (nom) afficherReservoir(nom);
+}
+
 function afficherRegion(region) {
     const grid = document.getElementById('centraleCharts');
     if (!grid) return;
@@ -3284,9 +3327,15 @@ function afficherRegion(region) {
     const reste = toutes.length - top.length;
     const resume = document.getElementById('r-region-summary');
     if (resume) {
-        resume.textContent = reste > 0
+        const base = reste > 0
             ? `${CENTRALE_SLOTS} centrales les plus puissantes · ${reste} autre${reste > 1 ? 's' : ''} non affichée${reste > 1 ? 's' : ''}`
             : `${toutes.length} centrale${toutes.length > 1 ? 's' : ''} dans cette région`;
+        // Le retard de publication d'HQ se voit dans les dates : autant le dire.
+        const fin = finDeSerie(top[0]?.series);
+        const retard = fin ? (Date.now() - fin) / 864e5 : 0;
+        resume.textContent = retard >= 1
+            ? `${base} · données arrêtées au ${new Date(fin).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}`
+            : base;
     }
 
     // Les Chart.js sont indexés par id de canvas : il faut détruire TOUS les
@@ -3320,7 +3369,10 @@ function petitGraphique(canvasId, series, couleur) {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !window.chartManager) return;
 
-    const pts = series.slice(-168); // 7 jours horaires
+    // Même horizon que le reste du tableau de bord, au lieu d'une découpe
+    // fixe à 168 points qui ignorait le curseur.
+    const pts = limiterHorizon(series, { ancre: finDeSerie(series) });
+    if (!pts.length) return;
     window.chartManager.createOrUpdate(canvas, 'line', {
         labels: pts.map(r => new Date(r.date).toLocaleString('fr-CA', { month: 'numeric', day: 'numeric', hour: '2-digit' })),
         datasets: [{
@@ -3360,8 +3412,12 @@ function remplirSelecteurReservoirs(niveauxRows) {
     if (sel.value) afficherReservoir(sel.value);
 }
 
+let reservoirChoisi = null;
+
 function afficherReservoir(nom) {
-    const series = hydroData.niveaux[nom] || [];
+    reservoirChoisi = nom;
+    const brut = hydroData.niveaux[nom] || [];
+    const series = limiterHorizon(brut, { ancre: finDeSerie(brut) });
     const canvas = document.getElementById('reservoirsChart');
     if (!canvas || !window.chartManager || !series.length) return;
 
@@ -3370,7 +3426,8 @@ function afficherReservoir(nom) {
     const resume = document.getElementById('r-reservoir-summary');
     if (resume) {
         const signe = delta > 0 ? '+' : '';
-        resume.textContent = `${dernier.valeur.toFixed(2)} m · ${signe}${delta.toFixed(2)} m sur 7 jours`
+        // L'écart se rapporte à la fenêtre affichée, pas à un « 7 jours » figé.
+        resume.textContent = `${dernier.valeur.toFixed(2)} m · ${signe}${delta.toFixed(2)} m sur ${libelleHorizon(HORIZON_JOURS)}`
             + ` · relevé du ${new Date(dernier.date).toLocaleString('fr-CA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
     }
 
@@ -3417,46 +3474,79 @@ setInterval(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 function redessinerOngletActif() {
     const actif = document.querySelector('.nav-link.active')?.id;
-    if (actif === 'btn-analysis')      refreshAnalysisTab();
-    else if (actif === 'btn-canada')   loadCanadaTab();
-    else if (actif === 'btn-nuclear')  loadNuclearTab();
-    else if (actif === 'btn-ontario')  loadOntarioTab();
-    else if (actif === 'btn-reservoirs') loadReservoirsData();
+    if (actif === 'btn-analysis')        refreshAnalysisTab();
+    else if (actif === 'btn-canada')     loadCanadaTab();
+    else if (actif === 'btn-nuclear')    loadNuclearTab();
+    else if (actif === 'btn-ontario')    loadOntarioTab();
+    else if (actif === 'btn-reservoirs') redessinerReservoirs();
+    else if (actif === 'btn-demand')     renderProductionCharts?.();
+}
+
+// Étendue réellement disponible, toutes séries confondues.
+function jointDisponible() {
+    const etendue = serie => {
+        if (!serie || serie.length < 2) return 0;
+        const d = serie.map(p => new Date(p.date).getTime());
+        return (Math.max(...d) - Math.min(...d)) / 864e5;
+    };
+    return Math.max(
+        etendue(seriesCompletes.demande),
+        etendue(seriesCompletes.production),
+        etendue(seriesCompletes.echanges)
+    );
+}
+
+function libelleHorizon(jours) {
+    if (!jours) return 'tout';
+    if (jours === 1) return '24 heures';
+    return `${jours} jours`;
 }
 
 function decrireHorizon() {
     const note = document.getElementById('horizonNote');
     if (!note) return;
-    const etendue = serie => {
-        if (!serie.length) return 0;
-        const d = serie.map(p => new Date(p.date).getTime());
-        return (Math.max(...d) - Math.min(...d)) / 864e5;
-    };
-    const jours = Math.max(etendue(store.demand), etendue(store.production), etendue(store.exchange));
-    note.textContent = jours >= 1 ? `· ${jours.toFixed(1)} j chargés` : '';
+    const dispo = jointDisponible();
+    note.textContent = dispo >= 1 ? `· ${dispo.toFixed(1)} j disponibles` : '';
+
+    // Les paliers au-delà du disponible n'ont aucun effet visible : on borne le
+    // curseur pour que sa course corresponde à ce qu'on peut réellement voir.
+    const curseur = document.getElementById('horizonRange');
+    if (!curseur || !dispo) return;
+    let dernierUtile = HORIZON_PALIERS.findIndex(j => j !== 0 && j >= dispo);
+    curseur.max = dernierUtile === -1 ? HORIZON_PALIERS.length - 1
+                                      : Math.min(dernierUtile + 1, HORIZON_PALIERS.length - 1);
+    if (+curseur.value > +curseur.max) curseur.value = curseur.max;
 }
 
-async function changerHorizon(jours) {
+// Le curseur ne refait aucun appel : les séries complètes sont déjà en
+// mémoire, on ne fait que recalculer la fenêtre et redessiner.
+function appliquerHorizon(jours, redessiner = true) {
     HORIZON_JOURS = jours;
-    const select = document.getElementById('horizonSelect');
-    if (select) select.disabled = true;
-    try {
-        await Promise.all([
-            loadDemandTabWithHistory(),
-            loadProductionTabWithHistory(),
-            loadExchangeTabWithHistory()
-        ]);
-        redessinerOngletActif();
-        decrireHorizon();
-        log(`🔭 Horizon: ${jours ? jours + ' j' : 'tout'}`);
-    } finally {
-        if (select) select.disabled = false;
-    }
+    const etiquette = document.getElementById('horizonLabel');
+    if (etiquette) etiquette.textContent = libelleHorizon(jours);
+
+    if (seriesCompletes.demande.length)    store.demand    = limiterHorizon(seriesCompletes.demande);
+    if (seriesCompletes.production.length) store.production = limiterHorizon(seriesCompletes.production);
+    if (seriesCompletes.echanges.length)   store.exchange  = limiterHorizon(seriesCompletes.echanges);
+
+    if (redessiner) redessinerOngletActif();
+    decrireHorizon();
 }
 
-document.getElementById('horizonSelect')?.addEventListener('change', e => {
-    changerHorizon(parseInt(e.target.value, 10));
-});
+(() => {
+    const curseur = document.getElementById('horizonRange');
+    if (!curseur) return;
+    curseur.value = String(HORIZON_PALIERS.indexOf(HORIZON_JOURS));
+
+    // `input` suit le doigt pour l'étiquette, `change` redessine une fois le
+    // curseur relâché : redessiner à chaque pixel rendrait le geste saccadé.
+    curseur.addEventListener('input', () => {
+        const jours = HORIZON_PALIERS[+curseur.value];
+        const etiquette = document.getElementById('horizonLabel');
+        if (etiquette) etiquette.textContent = libelleHorizon(jours);
+    });
+    curseur.addEventListener('change', () => appliquerHorizon(HORIZON_PALIERS[+curseur.value]));
+})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  INIT — demand is critical, rest loads lazily
@@ -3475,7 +3565,7 @@ document.getElementById('horizonSelect')?.addEventListener('change', e => {
         await loadCanadaTab();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
-        decrireHorizon();
+        appliquerHorizon(HORIZON_JOURS, false);
         log('✅ Dashboard prêt');
     } catch(err) {
         document.getElementById('loading').innerHTML =
