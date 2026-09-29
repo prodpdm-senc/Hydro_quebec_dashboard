@@ -234,6 +234,23 @@
         .unit-row { display: grid; grid-template-columns: 38px 1fr 58px 56px; align-items: center; gap: 8px; }
         .unit-label { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); }
         .unit-bar-wrap { background: rgba(0,0,0,0.07); border-radius: 3px; height: 7px; overflow: hidden; }
+        /* La barre d'horizon est posée sur le dégradé sombre du fond mais vit
+           hors de .header : elle héritait donc de --text-primary, un bleu
+           presque noir, illisible sur ce violet. On l'aligne sur l'en-tête.
+
+           Les nuances passent par la transparence de la couleur et non par
+           `opacity` : `opacity` délave l'élément entier, surlignage compris,
+           ce qui rendait le texte sélectionné encore moins lisible. */
+        #horizonBar                  { color: var(--text-light); }
+        #horizonBar .horizon-libelle { color: rgba(255,255,255,0.85); }
+        #horizonBar #horizonNote     { color: rgba(255,255,255,0.65); }
+
+        /* Sans règle explicite, le navigateur peignait la sélection en bleu
+           foncé sur un fond déjà sombre. La sélection remplaçant fond et
+           texte, un seul couple clair sur sombre convient aux deux thèmes. */
+        ::selection      { background: #a5d8ff; color: #10203a; }
+        ::-moz-selection { background: #a5d8ff; color: #10203a; }
+
         [data-theme="dark"] .unit-bar-wrap { background: rgba(255,255,255,0.1); }
         .unit-bar-fill {
             height: 100%;
@@ -400,11 +417,11 @@
 
         <!-- HORIZON D'AFFICHAGE -->
         <div class="d-flex justify-content-center align-items-center gap-2 mb-3 flex-wrap" id="horizonBar">
-            <span style="font-size:0.82rem; opacity:0.85">Afficher</span>
+            <span class="horizon-libelle" style="font-size:0.82rem">Afficher</span>
             <input type="range" id="horizonRange" min="0" max="12" step="1" value="4"
                    style="width:min(300px,45vw); accent-color:#4a9fd8; cursor:pointer">
             <strong id="horizonLabel" style="font-size:0.85rem; min-width:5.5em">7 jours</strong>
-            <span id="horizonNote" style="font-size:0.78rem; opacity:0.6"></span>
+            <span id="horizonNote" style="font-size:0.78rem"></span>
         </div>
 
         <!-- TABS NAV -->
