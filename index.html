@@ -365,7 +365,6 @@
                 gap: 6px;
             }
             #tab-ontario .d-flex.justify-content-between .d-flex { flex-direction: row; }
-            #onBtn2j, #onBtn7j { font-size: 0.75rem; padding: 2px 10px; }
 
             /* Tab action buttons */
             .tab-actions { gap: 8px; margin-top: 8px; }
@@ -754,13 +753,7 @@
                     <div class="chart-container" style="height:420px; padding:16px 16px 48px">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="mb-0" id="onHistoryTitle">Mix de production Ontario — 7 derniers jours (horaire)</h6>
-                            <div class="d-flex align-items-center gap-2">
-                                <span id="on-grid-status" style="font-size:0.75rem; color:var(--text-secondary)"></span>
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <button type="button" class="btn btn-outline-secondary" id="onBtn2j" onclick="switchOntarioPeriod(2)">2 j</button>
-                                    <button type="button" class="btn btn-outline-secondary active" id="onBtn7j" onclick="switchOntarioPeriod(7)">7 j</button>
-                                </div>
-                            </div>
+                            <span id="on-grid-status" style="font-size:0.75rem; color:var(--text-secondary)"></span>
                         </div>
                         <canvas id="onGridHistoryChart"></canvas>
                     </div>
@@ -2410,16 +2403,18 @@ async function fetchOntarioGrid() {
     return loaded;
 }
 
-let ontarioPeriodDays = 7;   // 2 or 7
+// L'onglet Ontario avait ses propres boutons 2 j / 7 j, doublon du curseur
+// d'horizon une fois celui-ci affiché ici. Il suit maintenant le curseur.
+// Rappel : data/daily ne conserve que 7 jours, donc au-delà il n'y a rien de
+// plus à montrer même si le curseur va plus loin.
 
-function switchOntarioPeriod(days) {
-    ontarioPeriodDays = days;
-    document.getElementById('onBtn2j').classList.toggle('active', days === 2);
-    document.getElementById('onBtn7j').classList.toggle('active', days === 7);
-    const label = days === 2 ? '2 derniers jours' : '7 derniers jours';
-    document.getElementById('onHistoryTitle').textContent =
-        `Mix de production Ontario — ${label} (horaire)`;
-    renderOntarioGrid(ontarioGridData);
+function majTitreOntario(nbJours) {
+    const titre = document.getElementById('onHistoryTitle');
+    if (!titre) return;
+    // Le nombre affiché est celui des journées réellement présentes, qui peut
+    // être inférieur à l'horizon demandé : data/daily n'en garde que sept.
+    const s = nbJours > 1 ? 's' : '';
+    titre.textContent = `Mix de production Ontario — ${nbJours} dernier${s} jour${s} (horaire)`;
 }
 
 function renderOntarioGrid(dailyData) {
@@ -2455,9 +2450,8 @@ function renderOntarioGrid(dailyData) {
 
     // ── Build combined time series (all days concatenated) ──
     // Filter to selected period
-    const periodData = ontarioPeriodDays >= 7
-        ? dailyData
-        : dailyData.slice(-ontarioPeriodDays);
+    const periodData = HORIZON_JOURS ? dailyData.slice(-HORIZON_JOURS) : dailyData;
+    majTitreOntario(periodData.length);
 
     const allLabels  = [];
     const fuelSeries = {};    // fuel -> flat MW array
@@ -3494,7 +3488,7 @@ function redessinerOngletActif() {
     if (actif === 'btn-analysis')        refreshAnalysisTab();
     else if (actif === 'btn-canada')     loadCanadaTab();
     else if (actif === 'btn-nuclear')    loadNuclearTab();
-    else if (actif === 'btn-ontario')    loadOntarioTab();
+    else if (actif === 'btn-ontario')    renderOntarioGrid(ontarioGridData);
     else if (actif === 'btn-reservoirs') redessinerReservoirs();
     else if (actif === 'btn-demand')     renderProductionCharts?.();
 }
@@ -3550,6 +3544,29 @@ function appliquerHorizon(jours, redessiner = true) {
     decrireHorizon();
 }
 
+// Le curseur n'a de sens que là où il gouverne quelque chose. L'onglet Canada
+// affiche des capacités installées et des valeurs instantanées, l'onglet
+// Nucléaire une photo du parc : ni l'un ni l'autre n'a de série temporelle à
+// fenêtrer.
+const ONGLETS_AVEC_HORIZON = new Set(['btn-demand', 'btn-reservoirs', 'btn-analysis', 'btn-ontario']);
+
+function majVisibiliteHorizon() {
+    const barre = document.getElementById('horizonBar');
+    if (!barre) return;
+    const actif = document.querySelector('#mainTabs .nav-link.active')?.id;
+    if (ONGLETS_AVEC_HORIZON.has(actif)) {
+        barre.style.removeProperty('display');
+    } else {
+        // La barre porte la classe Bootstrap d-flex, soit display:flex
+        // !important : un style inline ordinaire ne la masquerait pas.
+        barre.style.setProperty('display', 'none', 'important');
+    }
+}
+
+document.querySelectorAll('#mainTabs .nav-link').forEach(bouton => {
+    bouton.addEventListener('shown.bs.tab', majVisibiliteHorizon);
+});
+
 (() => {
     const curseur = document.getElementById('horizonRange');
     if (!curseur) return;
@@ -3583,6 +3600,7 @@ function appliquerHorizon(jours, redessiner = true) {
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
         appliquerHorizon(HORIZON_JOURS, false);
+        majVisibiliteHorizon();
         log('✅ Dashboard prêt');
     } catch(err) {
         document.getElementById('loading').innerHTML =
